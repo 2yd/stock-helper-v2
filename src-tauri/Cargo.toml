@@ -1,0 +1,36 @@
+[package]
+name = "stock-helper"
+version = "0.1.0"
+description = "A股量化选股助手 - AI赋能竞价选股系统"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.10.0", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+reqwest = { version = "0.12", features = ["json", "gzip", "stream"] }
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+encoding_rs = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1.0"
+futures = "0.3"
+regex = "1"
+urlencoding = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
