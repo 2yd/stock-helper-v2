@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Loader2, RefreshCw, Zap, Newspaper, FileText, BookOpen,
   ExternalLink, Search, ChevronDown, Clock, Building2, Star,
-  Tag,
+  Tag, Filter,
 } from 'lucide-react';
+import type { NewsCategory } from '../types';
 import { Tooltip } from 'antd';
 import { open } from '@tauri-apps/plugin-shell';
 import { useNewsStore, type NewsTab } from '../stores/newsStore';
@@ -261,16 +262,48 @@ export default function NewsCenter() {
 }
 
 // ============================================================
-// 子面板组件
+// 来源配色和快讯来源配置
 // ============================================================
 
+type TelegraphSource = 'all' | 'ClsTelegraph' | 'Sina7x24' | 'WallStreetCn';
+
+const TELEGRAPH_SOURCE_CONFIG: { key: TelegraphSource; label: string; color: string; dotColor: string; bgColor: string; borderColor: string }[] = [
+  { key: 'all', label: '全部', color: 'text-txt-secondary', dotColor: '', bgColor: '', borderColor: '' },
+  { key: 'ClsTelegraph', label: '财联社', color: 'text-yellow-400', dotColor: 'bg-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/20' },
+  { key: 'Sina7x24', label: '新浪7x24', color: 'text-orange-400', dotColor: 'bg-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/20' },
+  { key: 'WallStreetCn', label: '华尔街见闻', color: 'text-cyan-400', dotColor: 'bg-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/20' },
+];
+
+function getSourceStyle(category: string) {
+  switch (category) {
+    case 'ClsTelegraph': return { label: '财联社', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', dotColor: 'bg-yellow-400' };
+    case 'Sina7x24': return { label: '新浪7x24', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', dotColor: 'bg-orange-400' };
+    case 'WallStreetCn': return { label: '华尔街见闻', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', dotColor: 'bg-cyan-400' };
+    default: return { label: '未知', color: 'text-txt-muted', bg: 'bg-bg-elevated', border: 'border-[#484F58]', dotColor: 'bg-[#484F58]' };
+  }
+}
+
 function TelegraphPanel({ items, loading, formatTime, importanceBadge, openUrl }: {
-  items: { id: string; title: string; summary: string; publish_time: string; importance: number; related_stocks: string[]; url: string; source: string }[];
+  items: { id: string; title: string; summary: string; publish_time: string; importance: number; related_stocks: string[]; url: string; source: string; category: NewsCategory }[];
   loading: boolean;
   formatTime: (t: string) => string;
   importanceBadge: (level: number) => React.ReactNode;
   openUrl: (url: string) => void;
 }) {
+  const [sourceFilter, setSourceFilter] = useState<TelegraphSource>('all');
+
+  const filteredItems = sourceFilter === 'all'
+    ? items
+    : items.filter((item) => item.category === sourceFilter);
+
+  // 各来源计数
+  const counts: Record<TelegraphSource, number> = {
+    all: items.length,
+    ClsTelegraph: items.filter(i => i.category === 'ClsTelegraph').length,
+    Sina7x24: items.filter(i => i.category === 'Sina7x24').length,
+    WallStreetCn: items.filter(i => i.category === 'WallStreetCn').length,
+  };
+
   if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -282,78 +315,118 @@ function TelegraphPanel({ items, loading, formatTime, importanceBadge, openUrl }
 
   return (
     <div className="relative">
+      {/* 来源筛选栏 */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-[#30363D] bg-bg-elevated/30 flex-shrink-0 sticky top-0 z-10">
+        <Filter size={11} className="text-txt-muted flex-shrink-0" />
+        <div className="flex items-center gap-1">
+          {TELEGRAPH_SOURCE_CONFIG.map(({ key, label, color, dotColor }) => (
+            <button
+              key={key}
+              onClick={() => setSourceFilter(key)}
+              className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-md transition-all cursor-pointer ${
+                sourceFilter === key
+                  ? `${color} bg-bg-card border border-[#484F58] font-medium`
+                  : 'text-txt-muted hover:text-txt-secondary'
+              }`}
+            >
+              {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} flex-shrink-0`} />}
+              {label}
+              <span className="text-[9px] opacity-60">{counts[key]}</span>
+            </button>
+          ))}
+        </div>
+        <span className="text-[10px] text-txt-muted ml-auto">
+          共 {filteredItems.length} 条
+        </span>
+      </div>
+
       {/* 时间线 */}
-      <div className="absolute left-[72px] top-0 bottom-0 w-px bg-[#30363D]" />
+      <div className="relative">
+        <div className="absolute left-[72px] top-0 bottom-0 w-px bg-[#30363D]" />
 
-      {items.map((item, idx) => (
-        <div
-          key={item.id}
-          className={`flex gap-3 px-4 py-2.5 hover:bg-bg-elevated/50 transition-colors group cursor-pointer ${
-            item.importance >= 2 ? 'bg-red-500/5' : item.importance >= 1 ? 'bg-orange-500/5' : ''
-          }`}
-          onClick={() => openUrl(item.url)}
-        >
-          {/* 时间 */}
-          <div className="w-14 flex-shrink-0 text-right">
-            <span className="text-[11px] text-txt-muted font-mono tabular-nums">
-              {formatTime(item.publish_time)}
-            </span>
-          </div>
+        {filteredItems.map((item) => {
+          const srcStyle = getSourceStyle(item.category);
+          return (
+            <div
+              key={item.id}
+              className={`flex gap-3 px-4 py-2.5 hover:bg-bg-elevated/50 transition-colors group cursor-pointer ${
+                item.importance >= 2 ? 'bg-red-500/5' : item.importance >= 1 ? 'bg-orange-500/5' : ''
+              }`}
+              onClick={() => openUrl(item.url)}
+            >
+              {/* 时间 */}
+              <div className="w-14 flex-shrink-0 text-right">
+                <span className="text-[11px] text-txt-muted font-mono tabular-nums">
+                  {formatTime(item.publish_time)}
+                </span>
+              </div>
 
-          {/* 时间线节点 */}
-          <div className="relative flex-shrink-0 w-2 flex items-start pt-1.5">
-            <div className={`w-2 h-2 rounded-full ${
-              item.importance >= 2 ? 'bg-red-500 ring-2 ring-red-500/30' :
-              item.importance >= 1 ? 'bg-orange-400 ring-2 ring-orange-400/30' :
-              'bg-[#484F58]'
-            }`} />
-          </div>
+              {/* 时间线节点 - 用来源色标 */}
+              <div className="relative flex-shrink-0 w-2 flex items-start pt-1.5">
+                <div className={`w-2 h-2 rounded-full ${
+                  item.importance >= 2 ? 'bg-red-500 ring-2 ring-red-500/30' :
+                  item.importance >= 1 ? 'bg-orange-400 ring-2 ring-orange-400/30' :
+                  srcStyle.dotColor
+                }`} />
+              </div>
 
-          {/* 内容 */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start gap-2">
-              {importanceBadge(item.importance)}
-              <p className={`text-xs leading-relaxed ${
-                item.importance >= 2 ? 'text-txt-primary font-semibold' :
-                item.importance >= 1 ? 'text-txt-primary font-medium' :
-                'text-txt-secondary'
-              } group-hover:text-txt-primary transition-colors`}>
-                {item.title || item.summary}
-              </p>
-            </div>
-            {item.title && item.summary && item.title !== item.summary && (
-              <p className="text-[11px] text-txt-muted mt-1 line-clamp-2 leading-relaxed">
-                {item.summary}
-              </p>
-            )}
-            {/* 关联股票标签 */}
-            {item.related_stocks.length > 0 && (
-              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                {item.related_stocks.slice(0, 5).map((code) => (
-                  <span
-                    key={code}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {code}
+              {/* 内容 */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-1.5">
+                  {/* 来源小标签 */}
+                  <span className={`inline-flex items-center px-1 py-0 rounded text-[9px] leading-[16px] flex-shrink-0 mt-px border ${srcStyle.bg} ${srcStyle.color} ${srcStyle.border}`}>
+                    {srcStyle.label}
                   </span>
-                ))}
-                {item.related_stocks.length > 5 && (
-                  <span className="text-[10px] text-txt-muted">+{item.related_stocks.length - 5}</span>
+                  {importanceBadge(item.importance)}
+                  <p className={`text-xs leading-relaxed ${
+                    item.importance >= 2 ? 'text-txt-primary font-semibold' :
+                    item.importance >= 1 ? 'text-txt-primary font-medium' :
+                    'text-txt-secondary'
+                  } group-hover:text-txt-primary transition-colors`}>
+                    {item.title || item.summary}
+                  </p>
+                </div>
+                {item.title && item.summary && item.title !== item.summary && (
+                  <p className="text-[11px] text-txt-muted mt-1 line-clamp-2 leading-relaxed ml-[calc(2rem+6px)]">
+                    {item.summary}
+                  </p>
+                )}
+                {/* 关联股票标签 */}
+                {item.related_stocks.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1.5 flex-wrap ml-[calc(2rem+6px)]">
+                    {item.related_stocks.slice(0, 5).map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {code}
+                      </span>
+                    ))}
+                    {item.related_stocks.length > 5 && (
+                      <span className="text-[10px] text-txt-muted">+{item.related_stocks.length - 5}</span>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
+
+              <ExternalLink size={11} className="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
+            </div>
+          );
+        })}
+
+        {filteredItems.length === 0 && !loading && (
+          <div className="flex items-center justify-center h-32 text-xs text-txt-muted">
+            该来源暂无快讯
           </div>
+        )}
 
-          <ExternalLink size={11} className="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
-        </div>
-      ))}
-
-      {loading && items.length > 0 && (
-        <div className="flex items-center justify-center py-4">
-          <Loader2 size={14} className="animate-spin text-txt-muted" />
-        </div>
-      )}
+        {loading && items.length > 0 && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 size={14} className="animate-spin text-txt-muted" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

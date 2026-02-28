@@ -15,6 +15,10 @@ pub enum NewsCategory {
     Report,
     /// 新浪财经滚动新闻
     SinaRoll,
+    /// 新浪7x24财经直播快讯
+    Sina7x24,
+    /// 华尔街见闻快讯
+    WallStreetCn,
 }
 
 /// 统一的新闻/资讯条目

@@ -562,8 +562,10 @@ async fn get_market_news(count: u32) -> Result<String> {
     let cls_fut = timeout(Duration::from_secs(8), news_service::fetch_cls_telegraph(count));
     let em_fut = timeout(Duration::from_secs(8), news_service::fetch_eastmoney_news(1, count));
     let sina_fut = timeout(Duration::from_secs(8), news_service::fetch_sina_roll_news(1, count));
+    let sina7x24_fut = timeout(Duration::from_secs(8), news_service::fetch_sina_7x24(count));
+    let wscn_fut = timeout(Duration::from_secs(8), news_service::fetch_wallstreetcn_lives(count));
 
-    let (cls, em, sina) = tokio::join!(cls_fut, em_fut, sina_fut);
+    let (cls, em, sina, sina7x24, wscn) = tokio::join!(cls_fut, em_fut, sina_fut, sina7x24_fut, wscn_fut);
 
     let mut items = Vec::new();
 
@@ -604,6 +606,32 @@ async fn get_market_news(count: u32) -> Result<String> {
                 "source": "新浪财经",
                 "time": n.publish_time,
                 "title": n.title,
+            }));
+        }
+    }
+
+    if let Ok(Ok(news)) = sina7x24 {
+        for n in news.into_iter().take((count / 2) as usize) {
+            let importance_tag = if n.importance >= 1 { "【关注】" } else { "" };
+            let summary = truncate_str(&n.summary, 200);
+            items.push(serde_json::json!({
+                "source": "新浪7x24",
+                "time": n.publish_time,
+                "title": format!("{}{}", importance_tag, n.title),
+                "summary": summary,
+            }));
+        }
+    }
+
+    if let Ok(Ok(news)) = wscn {
+        for n in news.into_iter().take((count / 2) as usize) {
+            let importance_tag = if n.importance >= 1 { "【关注】" } else { "" };
+            let summary = truncate_str(&n.summary, 200);
+            items.push(serde_json::json!({
+                "source": "华尔街见闻",
+                "time": n.publish_time,
+                "title": format!("{}{}", importance_tag, n.title),
+                "summary": summary,
             }));
         }
     }

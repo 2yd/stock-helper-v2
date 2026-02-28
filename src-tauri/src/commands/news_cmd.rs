@@ -77,3 +77,25 @@ pub async fn fetch_sina_news(
         .await
         .map_err(|e| format!("获取新浪新闻失败: {}", e))
 }
+
+/// 获取新浪7x24财经直播快讯
+#[tauri::command]
+pub async fn fetch_sina_7x24(
+    count: Option<u32>,
+) -> Result<Vec<NewsItem>, String> {
+    let count = count.unwrap_or(30);
+    news_service::fetch_sina_7x24(count)
+        .await
+        .map_err(|e| format!("获取新浪7x24快讯失败: {}", e))
+}
+
+/// 获取华尔街见闻快讯
+#[tauri::command]
+pub async fn fetch_wallstreetcn_lives(
+    count: Option<u32>,
+) -> Result<Vec<NewsItem>, String> {
+    let count = count.unwrap_or(30);
+    news_service::fetch_wallstreetcn_lives(count)
+        .await
+        .map_err(|e| format!("获取华尔街见闻快讯失败: {}", e))
+}

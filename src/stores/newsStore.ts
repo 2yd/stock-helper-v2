@@ -65,10 +65,25 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
   fetchTelegraphs: async () => {
     set({ telegraphLoading: true });
     try {
-      const items = await invoke<NewsItem[]>('fetch_cls_telegraph', { count: 50 });
-      set({ telegraphs: items, telegraphLoading: false });
+      // 三源并发: 财联社 + 新浪7x24 + 华尔街见闻
+      const [clsItems, sina7x24Items, wscnItems] = await Promise.allSettled([
+        invoke<NewsItem[]>('fetch_cls_telegraph', { count: 50 }),
+        invoke<NewsItem[]>('fetch_sina_7x24', { count: 30 }),
+        invoke<NewsItem[]>('fetch_wallstreetcn_lives', { count: 30 }),
+      ]);
+
+      const cls = clsItems.status === 'fulfilled' ? clsItems.value : [];
+      const sina = sina7x24Items.status === 'fulfilled' ? sina7x24Items.value : [];
+      const wscn = wscnItems.status === 'fulfilled' ? wscnItems.value : [];
+
+      // 合并后按时间倒序
+      const combined = [...cls, ...sina, ...wscn].sort(
+        (a, b) => b.publish_time.localeCompare(a.publish_time)
+      );
+
+      set({ telegraphs: combined, telegraphLoading: false });
     } catch (e) {
-      console.error('获取财联社快讯失败:', e);
+      console.error('获取快讯失败:', e);
       set({ telegraphLoading: false });
     }
   },

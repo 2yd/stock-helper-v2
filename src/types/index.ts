@@ -255,7 +255,9 @@ export type NewsCategory =
   | 'StockNews'
   | 'Announcement'
   | 'Report'
-  | 'SinaRoll';
+  | 'SinaRoll'
+  | 'Sina7x24'
+  | 'WallStreetCn';
 
 export interface NewsItem {
   id: string;

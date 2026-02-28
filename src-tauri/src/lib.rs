@@ -94,6 +94,8 @@ pub fn run() {
             commands::news_cmd::fetch_announcements,
             commands::news_cmd::fetch_reports,
             commands::news_cmd::fetch_sina_news,
+            commands::news_cmd::fetch_sina_7x24,
+            commands::news_cmd::fetch_wallstreetcn_lives,
             commands::ai_pick_cmd::ai_pick_stocks,
             commands::ai_pick_cmd::get_cached_picks,
             commands::ai_pick_cmd::find_similar_stocks,

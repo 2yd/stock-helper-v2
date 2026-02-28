@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 
 use crate::models::news::NewsItem;
-use crate::services::news_service::{fetch_cls_telegraph, fetch_eastmoney_news, fetch_sina_roll_news};
+use crate::services::news_service::{fetch_cls_telegraph, fetch_eastmoney_news, fetch_sina_roll_news, fetch_sina_7x24, fetch_wallstreetcn_lives};
 use crate::utils::http::build_stock_client;
 
 #[derive(Debug, Clone, Default)]
@@ -47,16 +47,20 @@ impl ThematicScoringEngine {
     }
 
     pub async fn build_sentiment_map(&self) -> Result<ThematicScoringResult> {
-        let (cls_news, em_news, sina_news) = tokio::join!(
+        let (cls_news, em_news, sina_news, sina7x24_news, wscn_news) = tokio::join!(
             fetch_cls_telegraph(120),
             fetch_eastmoney_news(1, 80),
-            fetch_sina_roll_news(1, 80)
+            fetch_sina_roll_news(1, 80),
+            fetch_sina_7x24(50),
+            fetch_wallstreetcn_lives(50)
         );
 
         let mut all_news: Vec<NewsItem> = Vec::new();
         if let Ok(v) = cls_news { all_news.extend(v); }
         if let Ok(v) = em_news { all_news.extend(v); }
         if let Ok(v) = sina_news { all_news.extend(v); }
+        if let Ok(v) = sina7x24_news { all_news.extend(v); }
+        if let Ok(v) = wscn_news { all_news.extend(v); }
 
         if all_news.is_empty() {
             return Ok(ThematicScoringResult::default());

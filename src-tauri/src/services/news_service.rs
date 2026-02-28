@@ -1,4 +1,5 @@
 use anyhow::Result;
+use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, REFERER, USER_AGENT};
 use serde_json::Value;
 use std::time::Duration;
@@ -517,6 +518,167 @@ pub async fn fetch_sina_roll_news(page: u32, count: u32) -> Result<Vec<NewsItem>
                 publish_time,
                 url: url_str,
                 importance: 0,
+                related_stocks: Vec::new(),
+            });
+        }
+    }
+
+    Ok(items)
+}
+
+// ============================================================
+// 7. 新浪 7x24 财经直播快讯
+// ============================================================
+
+pub async fn fetch_sina_7x24(count: u32) -> Result<Vec<NewsItem>> {
+    let client = build_news_client("https://finance.sina.com.cn/7x24/")?;
+    let url = format!(
+        "https://zhibo.sina.com.cn/api/zhibo/feed?page=1&page_size={}&zhibo_id=152&tag_id=0&dire=f&dpc=1",
+        count
+    );
+
+    let resp = client.get(&url).send().await?;
+    let json: Value = resp.json().await?;
+
+    let mut items = Vec::new();
+    if let Some(result) = json["result"]["data"]["feed"]["list"].as_array() {
+        for item in result {
+            let id = item["id"].as_u64().unwrap_or(0).to_string();
+            // rich_text 包含 HTML，提取纯文本
+            let raw_text = item["rich_text"]
+                .as_str()
+                .or_else(|| item["text"].as_str())
+                .unwrap_or("")
+                .to_string();
+            // 简单去除 HTML 标签
+            let content = raw_text
+                .replace("<br>", "\n")
+                .replace("<br/>", "\n")
+                .replace("<br />", "\n");
+            let content = Regex::new(r"<[^>]+>")
+                .map(|re| re.replace_all(&content, "").to_string())
+                .unwrap_or(content);
+
+            let create_time = item["create_time"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+
+            // 提取标签作为标题
+            let tag = item["tag"].as_array()
+                .and_then(|tags| tags.first())
+                .and_then(|t| t["name"].as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let title = if !tag.is_empty() {
+                format!("【{}】{}", tag, content.chars().take(60).collect::<String>())
+            } else {
+                content.chars().take(80).collect()
+            };
+
+            // 跳过空内容
+            if content.trim().is_empty() {
+                continue;
+            }
+
+            items.push(NewsItem {
+                id: format!("sina7x24_{}", id),
+                category: NewsCategory::Sina7x24,
+                title,
+                summary: content,
+                source: "新浪7x24".to_string(),
+                publish_time: create_time,
+                url: format!("https://finance.sina.com.cn/7x24/"),
+                importance: 0,
+                related_stocks: Vec::new(),
+            });
+        }
+    }
+
+    Ok(items)
+}
+
+// ============================================================
+// 8. 华尔街见闻快讯
+// ============================================================
+
+pub async fn fetch_wallstreetcn_lives(count: u32) -> Result<Vec<NewsItem>> {
+    let client = build_news_client("https://wallstreetcn.com/live/global")?;
+    let url = format!(
+        "https://api-prod.wallstreetcn.com/apiv1/content/lives?channel=global-channel&client=pc&limit={}",
+        count
+    );
+
+    let resp = client.get(&url).send().await?;
+    let json: Value = resp.json().await?;
+
+    let mut items = Vec::new();
+    if let Some(data) = json["data"]["items"].as_array() {
+        for item in data {
+            let id = item["id"].as_u64().unwrap_or(0).to_string();
+            let title = item["title"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            let content_text = item["content_text"]
+                .as_str()
+                .or_else(|| item["content"].as_str())
+                .unwrap_or("")
+                .to_string();
+            // 去 HTML 标签
+            let content_clean = Regex::new(r"<[^>]+>")
+                .map(|re| re.replace_all(&content_text, "").to_string())
+                .unwrap_or(content_text.clone());
+
+            let display_time = item["display_time"].as_i64().unwrap_or(0);
+
+            let publish_time = if display_time > 0 {
+                chrono::DateTime::from_timestamp(display_time, 0)
+                    .map(|dt| dt.with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).unwrap())
+                        .format("%Y-%m-%d %H:%M:%S")
+                        .to_string())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+
+            let uri = item["uri"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            let link = if !uri.is_empty() {
+                format!("https://wallstreetcn.com/live/{}", uri)
+            } else {
+                "https://wallstreetcn.com/live/global".to_string()
+            };
+
+            // 重要性: has_more 字段或 is_important
+            let importance = if item["is_important"].as_bool().unwrap_or(false) {
+                1
+            } else {
+                0
+            };
+
+            let final_title = if !title.is_empty() {
+                title
+            } else {
+                content_clean.chars().take(80).collect()
+            };
+
+            if final_title.trim().is_empty() && content_clean.trim().is_empty() {
+                continue;
+            }
+
+            items.push(NewsItem {
+                id: format!("wscn_{}", id),
+                category: NewsCategory::WallStreetCn,
+                title: final_title,
+                summary: content_clean,
+                source: "华尔街见闻".to_string(),
+                publish_time,
+                url: link,
+                importance,
                 related_stocks: Vec::new(),
             });
         }
