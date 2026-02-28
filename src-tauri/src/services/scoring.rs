@@ -142,6 +142,17 @@ impl MultiFactorEngine {
             return false;
         }
 
+        // ===== 次新股过滤：排除上市不足 N 天的新股 =====
+        if f.exclude_new_stock_days > 0 && !stock.list_date.is_empty() && stock.list_date != "-" {
+            if let Ok(list_dt) = chrono::NaiveDate::parse_from_str(&stock.list_date, "%Y%m%d") {
+                let today = chrono::Local::now().date_naive();
+                let days_listed = (today - list_dt).num_days();
+                if days_listed >= 0 && days_listed < f.exclude_new_stock_days as i64 {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 

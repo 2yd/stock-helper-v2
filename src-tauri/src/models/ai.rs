@@ -8,9 +8,17 @@ pub struct AIConfig {
     pub api_key: String,
     pub model_name: String,
     pub max_tokens: u32,
+    /// 分析/默认 temperature（精确场景，建议 0.1~0.3）
     pub temperature: f64,
+    /// 选股 temperature（发散场景，建议 0.5~0.8）
+    #[serde(default = "default_pick_temperature")]
+    pub pick_temperature: f64,
     pub timeout_secs: u64,
     pub enabled: bool,
+}
+
+fn default_pick_temperature() -> f64 {
+    0.7
 }
 
 impl Default for AIConfig {
@@ -23,6 +31,7 @@ impl Default for AIConfig {
             model_name: "gpt-4o-mini".to_string(),
             max_tokens: 2048,
             temperature: 0.3,
+            pick_temperature: 0.7,
             timeout_secs: 300,
             enabled: true,
         }

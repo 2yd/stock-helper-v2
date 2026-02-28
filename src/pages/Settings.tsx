@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
-import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint } from 'lucide-react';
+import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AIConfig } from '../types';
 
 export default function Settings() {
   const { message } = App.useApp();
-  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy } = useSettingsStore();
+  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId } = useSettingsStore();
+
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
   useEffect(() => {
     loadSettings();
@@ -25,6 +27,7 @@ export default function Settings() {
       model_name: 'gpt-4o-mini',
       max_tokens: 2048,
       temperature: 0.3,
+      pick_temperature: 0.7,
       timeout_secs: 300,
       enabled: true,
     };
@@ -33,7 +36,25 @@ export default function Settings() {
 
   const handleDeleteConfig = (id: string) => {
     removeAIConfig(id);
+    setTestResults(prev => { const n = { ...prev }; delete n[id]; return n; });
     message.success('模型已删除');
+  };
+
+  const handleTestConfig = async (config: AIConfig) => {
+    if (!config.api_key || !config.base_url) {
+      message.warning('请先填写 API 地址和 API Key');
+      return;
+    }
+    setTestResults(prev => ({ ...prev, [config.id]: { ok: false, msg: '' } }));
+    try {
+      const result = await testAIConfig(config);
+      setTestResults(prev => ({ ...prev, [config.id]: { ok: true, msg: result } }));
+      message.success('连接测试成功');
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setTestResults(prev => ({ ...prev, [config.id]: { ok: false, msg: errMsg } }));
+      message.error(`测试失败: ${errMsg}`);
+    }
   };
 
   const activeStrategy = settings.strategies.find(s => s.id === settings.active_strategy_id);
@@ -109,6 +130,18 @@ export default function Settings() {
                     </button>
                   )}
                   <button
+                    onClick={() => handleTestConfig(config)}
+                    disabled={testingConfigId === config.id}
+                    className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {testingConfigId === config.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Zap size={12} />
+                    )}
+                    {testingConfigId === config.id ? '测试中...' : '测试连接'}
+                  </button>
+                  <button
                     onClick={() => handleDeleteConfig(config.id)}
                     className="p-1 rounded hover:bg-red-900/30 transition-colors cursor-pointer"
                   >
@@ -117,7 +150,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-txt-muted block mb-1">API 地址</label>
                   <Input
@@ -148,7 +181,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <label className="text-xs text-txt-muted block mb-1">
-                    Temperature: {config.temperature.toFixed(1)}
+                    分析 Temperature: {config.temperature.toFixed(1)}
                   </label>
                   <Slider
                     min={0}
@@ -158,7 +191,59 @@ export default function Settings() {
                     onChange={v => updateAIConfig({ ...config, temperature: v })}
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-txt-muted block mb-1">
+                    选股 Temperature: {(config.pick_temperature ?? 0.7).toFixed(1)}
+                  </label>
+                  <Slider
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    value={config.pick_temperature ?? 0.7}
+                    onChange={v => updateAIConfig({ ...config, pick_temperature: v })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-txt-muted block mb-1">单次最大 Tokens</label>
+                  <InputNumber
+                    size="small"
+                    min={256}
+                    max={128000}
+                    step={256}
+                    value={config.max_tokens}
+                    onChange={v => updateAIConfig({ ...config, max_tokens: v || 2048 })}
+                    style={{ ...inputStyle, width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-txt-muted block mb-1">超时时间(秒)</label>
+                  <InputNumber
+                    size="small"
+                    min={30}
+                    max={600}
+                    step={30}
+                    value={config.timeout_secs}
+                    onChange={v => updateAIConfig({ ...config, timeout_secs: v || 300 })}
+                    style={{ ...inputStyle, width: '100%' }}
+                  />
+                </div>
               </div>
+
+              {/* Test Result */}
+              {testResults[config.id] && testResults[config.id].msg && (
+                <div className={`mt-3 px-3 py-2 rounded-md text-[11px] leading-relaxed flex items-start gap-2 ${
+                  testResults[config.id].ok
+                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                }`}>
+                  {testResults[config.id].ok ? (
+                    <CheckCircle size={13} className="flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle size={13} className="flex-shrink-0 mt-0.5" />
+                  )}
+                  <span className="break-all">{testResults[config.id].msg}</span>
+                </div>
+              )}
             </div>
           ))}
 

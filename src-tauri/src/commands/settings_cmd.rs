@@ -3,6 +3,7 @@ use crate::AppState;
 use crate::models::settings::AppSettings;
 use crate::models::ai::AIConfig;
 use crate::models::strategy::StrategyConfig;
+use crate::services::ai_service::AIService;
 
 #[tauri::command]
 pub async fn get_settings(
@@ -84,4 +85,12 @@ pub async fn update_strategy_config(
     }
     state.db.save_settings(&settings).map_err(|e| e.to_string())?;
     Ok(settings)
+}
+
+/// 测试 AI 模型配置是否可用
+#[tauri::command]
+pub async fn test_ai_config(
+    config: AIConfig,
+) -> Result<String, String> {
+    AIService::test_ai_connection(&config).await.map_err(|e| e.to_string())
 }

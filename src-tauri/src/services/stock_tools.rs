@@ -609,7 +609,7 @@ async fn get_market_news(count: u32) -> Result<String> {
     }
 
     if items.is_empty() {
-        return Ok(r#"{"total":0,"news":[],"note":"所有新闻源暂时不可用，请AI基于自身知识进行分析"}"#.to_string());
+        return Ok(r#"{"total":0,"news":[],"note":"所有新闻源暂时不可用，请基于已获取的其他工具数据进行分析，不要编造新闻内容"}"#.to_string());
     }
 
     let result = serde_json::json!({
@@ -780,7 +780,7 @@ async fn batch_get_stock_quotes(codes: &[String]) -> Result<String> {
     }).collect();
 
     let result = serde_json::json!({
-        "total": stocks.len(),
+        "total_count": stocks.len(),
         "stocks": stocks,
     });
     Ok(serde_json::to_string(&result)?)
@@ -1214,7 +1214,7 @@ pub fn summarize_tool_result(tool_name: &str, result: &str) -> String {
             lines.join("\n")
         }
         "batch_get_stock_quotes" => {
-            let total = json["total"].as_u64().unwrap_or(0);
+            let total = json["total_count"].as_u64().unwrap_or(0);
             let mut lines = vec![format!("获取到 {} 只股票行情", total)];
             if let Some(stocks) = json["stocks"].as_array() {
                 for s in stocks.iter().take(20) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare, Eye } from 'lucide-react';
+import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare, Eye, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import KlineChart from '../components/KlineChart';
@@ -22,7 +22,7 @@ const RATING_CONFIG: Record<string, { label: string; color: string; bg: string; 
 export default function AIPick() {
   const {
     picking, aiContent, recommendations, toolCalls, thinkingSteps, error, tokenUsage,
-    startPick, loadCachedPicks, reset,
+    startPick, stopPick, loadCachedPicks, reset,
     similarLoading, similarTarget, similarContent, similarPicks, similarToolCalls, similarThinkingSteps, similarError,
     findSimilarStocks, closeSimilar,
   } = useAIPickStore();
@@ -71,6 +71,10 @@ export default function AIPick() {
     reset();
     await startPick();
   }, [picking, reset, startPick]);
+
+  const handleStopPick = useCallback(async () => {
+    await stopPick();
+  }, [stopPick]);
 
   const handleStockClick = useCallback((rec: AIPickRecommendation) => {
     setSelectedStock(rec);
@@ -194,6 +198,15 @@ export default function AIPick() {
               )}
               {picking ? '分析中...' : '开始选股'}
             </button>
+            {picking && (
+              <button
+                onClick={handleStopPick}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-red-600/80 text-white hover:bg-red-500 active:bg-red-700 transition-all cursor-pointer"
+              >
+                <Square size={10} fill="currentColor" />
+                停止
+              </button>
+            )}
           </>
         )}
       </div>

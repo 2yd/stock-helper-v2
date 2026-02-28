@@ -33,6 +33,7 @@ const defaultSettings: AppSettings = {
 interface SettingsStore {
   settings: AppSettings | null;
   loading: boolean;
+  testingConfigId: string | null;
 
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -41,11 +42,13 @@ interface SettingsStore {
   updateAIConfig: (config: AIConfig) => Promise<void>;
   setActiveAIConfig: (configId: string) => Promise<void>;
   updateStrategy: (strategy: StrategyConfig) => Promise<void>;
+  testAIConfig: (config: AIConfig) => Promise<string>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
   settings: null,
   loading: false,
+  testingConfigId: null,
 
   loadSettings: async () => {
     set({ loading: true });
@@ -109,6 +112,18 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       set({ settings });
     } catch (e) {
       console.error('Failed to update strategy:', e);
+    }
+  },
+
+  testAIConfig: async (config: AIConfig) => {
+    set({ testingConfigId: config.id });
+    try {
+      const result = await invoke<string>('test_ai_config', { config });
+      return result;
+    } catch (e: unknown) {
+      throw e;
+    } finally {
+      set({ testingConfigId: null });
     }
   },
 }));

@@ -49,7 +49,7 @@ impl MarketScanner {
         // 沪深主板+创业板: m:0 t:6, m:0 t:80, m:1 t:2, m:1 t:23 去掉科创板
         // 只要主板+创业板: m:0 t:6 (深主板), m:0 t:80 (创业板), m:1 t:2 (沪主板)
         let fs = "m:0+t:6,m:0+t:80,m:1+t:2";
-        let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f37,f115,f62";
+        let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f37,f115,f62";
 
         let url = format!(
             "https://push2.eastmoney.com/api/qt/clist/get?pn={}&pz=5000&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs={}&fields={}",
@@ -93,7 +93,7 @@ impl MarketScanner {
 
         let secids: Vec<String> = codes.iter().map(|c| code_to_secid(c)).collect();
         let secid_str = secids.join(",");
-        let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f37,f115,f62";
+        let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f37,f115,f62";
 
         let url = format!(
             "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields={}&secids={}",
@@ -209,6 +209,10 @@ pub fn parse_eastmoney_item_public(item: &serde_json::Value) -> Option<MarketSto
         profit_yoy: 0.0,     // 需要单独接口或其他字段
         main_net_inflow: get_f64(item, "f62"),
         main_net_pct: 0.0,   // clist 无此字段
+        list_date: item.get("f26")
+            .and_then(|v| v.as_str())
+            .unwrap_or("-")
+            .to_string(),     // 上市日期 "YYYYMMDD" 或 "-"
     })
 }
 

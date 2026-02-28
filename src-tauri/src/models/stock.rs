@@ -30,6 +30,8 @@ pub struct MarketStockSnapshot {
     pub profit_yoy: f64,       // 净利润同比增长 %
     pub main_net_inflow: f64,  // 主力净流入（元）
     pub main_net_pct: f64,     // 主力净占比 %
+    #[serde(default)]
+    pub list_date: String,     // 上市日期 "YYYYMMDD"（来自东财 f26）
 }
 
 /// 实时行情数据（用于已选股票的详细盘口）

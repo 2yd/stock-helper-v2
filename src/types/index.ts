@@ -56,6 +56,8 @@ export interface AIConfig {
   model_name: string;
   max_tokens: number;
   temperature: number;
+  /** 选股 temperature（发散场景，建议 0.5~0.8） */
+  pick_temperature: number;
   timeout_secs: number;
   enabled: boolean;
 }

@@ -146,11 +146,17 @@ pub async fn generate_ai_instructions(
         }
     }).collect();
 
-    let instructions = AIService::batch_generate_instructions(&ai_config, &summaries)
+    let (instructions, token_usage) = AIService::batch_generate_instructions(&ai_config, &summaries)
         .await
         .map_err(|e| e.to_string())?;
 
-    let _ = state.db.record_token_usage(&ai_config.model_name, 500, 300);
+    if let Some(usage) = token_usage {
+        let _ = state.db.record_token_usage(
+            &ai_config.model_name,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+        );
+    }
 
     let mut updated = results;
     for inst in instructions {

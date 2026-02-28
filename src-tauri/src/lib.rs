@@ -6,11 +6,16 @@ pub mod utils;
 
 use db::database::Database;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tauri::Manager;
 
 pub struct AppState {
     pub db: Database,
     pub watch_codes: Mutex<Vec<String>>,
+    pub ai_picking: AtomicBool,
+    /// AI 选股取消信号：true 表示请求取消
+    pub ai_pick_cancel: Arc<AtomicBool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +45,8 @@ pub fn run() {
             app.manage(AppState {
                 db: database,
                 watch_codes: Mutex::new(saved_codes),
+                ai_picking: AtomicBool::new(false),
+                ai_pick_cancel: Arc::new(AtomicBool::new(false)),
             });
 
             Ok(())
@@ -67,6 +74,7 @@ pub fn run() {
             commands::settings_cmd::update_ai_config,
             commands::settings_cmd::set_active_ai_config,
             commands::settings_cmd::update_strategy_config,
+            commands::settings_cmd::test_ai_config,
             commands::pool_cmd::fetch_limit_up_pool,
             commands::pool_cmd::fetch_streak_pool,
             commands::pool_cmd::fetch_and_apply_high_pool,
@@ -88,6 +96,7 @@ pub fn run() {
             commands::ai_pick_cmd::ai_pick_stocks,
             commands::ai_pick_cmd::get_cached_picks,
             commands::ai_pick_cmd::find_similar_stocks,
+            commands::ai_pick_cmd::stop_ai_pick,
             commands::tracking_cmd::add_tracking_stock,
             commands::tracking_cmd::remove_tracking_stock,
             commands::tracking_cmd::get_tracking_stocks,

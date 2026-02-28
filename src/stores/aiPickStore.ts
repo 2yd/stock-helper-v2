@@ -36,6 +36,7 @@ interface AIPickState {
 
   // Actions
   startPick: () => Promise<void>;
+  stopPick: () => Promise<void>;
   loadCachedPicks: () => Promise<void>;
   reset: () => void;
   findSimilarStocks: (code: string, name: string, sector: string) => Promise<void>;
@@ -45,12 +46,24 @@ interface AIPickState {
 function parseRecommendations(content: string): AIPickRecommendation[] {
   const picksMatch = content.match(/<PICKS>\s*([\s\S]*?)\s*<\/PICKS>/);
   if (!picksMatch) return [];
-  const jsonStr = picksMatch[1].trim();
-  const parsed = JSON.parse(jsonStr);
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(
-    (item: AIPickRecommendation) => item.code && item.name && item.reason && item.rating,
-  );
+  try {
+    const jsonStr = picksMatch[1].trim();
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed)) {
+      console.warn('[AI Pick] PICKS 标签内容不是 JSON 数组:', jsonStr.slice(0, 200));
+      return [];
+    }
+    const valid = parsed.filter(
+      (item: AIPickRecommendation) => item.code && item.name && item.reason && item.rating,
+    );
+    if (valid.length === 0 && parsed.length > 0) {
+      console.warn('[AI Pick] PICKS 数组中无有效推荐项，缺少必要字段(code/name/reason/rating)');
+    }
+    return valid;
+  } catch (e) {
+    console.warn('[AI Pick] PICKS JSON 解析失败:', e, '原始内容:', picksMatch[1]?.slice(0, 300));
+    return [];
+  }
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -139,11 +152,15 @@ export const useAIPickStore = create<AIPickState>((set, get) => ({
         const fullContent = data.content || state.aiContent;
         let picks: AIPickRecommendation[] = [];
         try { picks = parseRecommendations(fullContent); } catch { /* ignore */ }
+        const parseWarning = picks.length === 0 && fullContent.includes('<PICKS')
+          ? 'AI 推荐结果解析异常，请查看原始分析报告'
+          : null;
         set({
           picking: false,
           aiContent: fullContent || state.aiContent,
           recommendations: picks,
           tokenUsage: data.usage?.total_tokens || null,
+          error: parseWarning,
         });
         unlisten();
       } else if (data.event_type === 'error') {
@@ -161,15 +178,27 @@ export const useAIPickStore = create<AIPickState>((set, get) => ({
     });
   },
 
+  stopPick: async () => {
+    try {
+      await safeInvoke('stop_ai_pick');
+    } catch {
+      // ignore — task may have already finished
+    }
+  },
+
   loadCachedPicks: async () => {
     const content = await safeInvoke<string | null>('get_cached_picks');
     if (content) {
       let picks: AIPickRecommendation[] = [];
       try { picks = parseRecommendations(content); } catch { /* ignore */ }
+      const parseWarning = picks.length === 0 && content.includes('<PICKS')
+        ? 'AI 推荐结果解析异常，请查看原始分析报告'
+        : null;
       set({
         cachedContent: content,
         aiContent: content,
         recommendations: picks,
+        error: parseWarning,
       });
     }
   },
@@ -232,10 +261,14 @@ export const useAIPickStore = create<AIPickState>((set, get) => ({
         const fullContent = data.content || state.similarContent;
         let picks: AIPickRecommendation[] = [];
         try { picks = parseRecommendations(fullContent); } catch { /* ignore */ }
+        const parseWarning = picks.length === 0 && fullContent.includes('<PICKS')
+          ? 'AI 推荐结果解析异常，请查看原始分析报告'
+          : null;
         set({
           similarLoading: false,
           similarContent: fullContent || state.similarContent,
           similarPicks: picks,
+          similarError: parseWarning,
         });
         unlisten();
       } else if (data.event_type === 'error') {

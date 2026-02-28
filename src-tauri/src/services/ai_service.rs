@@ -1,23 +1,106 @@
 use anyhow::{Result, anyhow};
 use futures::StreamExt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::models::ai::*;
 use crate::services::stock_tools;
 use crate::utils::http::build_ai_client;
+use crate::utils::retry::retry_with_backoff;
 
 const MAX_TOOL_ROUNDS: usize = 8;
-const MAX_PICK_TOOL_ROUNDS: usize = 15;
+const MAX_PICK_TOOL_ROUNDS: usize = 10;
+const MAX_PICK_TOKEN_BUDGET: u32 = 100_000;
 
 pub struct AIService;
 
 impl AIService {
+    /// 测试 AI 配置是否可用：发送一个简单请求验证 API 连通性
+    pub async fn test_ai_connection(config: &AIConfig) -> Result<String> {
+        let client = build_ai_client(config.timeout_secs.min(30))?; // 测试时最多等30秒
+        let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+
+        let req = ChatCompletionRequest {
+            model: config.model_name.clone(),
+            messages: vec![ChatMessage::user("请回复'连接成功'四个字，不要输出其他内容。")],
+            max_tokens: Some(20),
+            temperature: Some(0.0),
+            stream: Some(false),
+            tools: None,
+            tool_choice: None,
+        };
+
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    anyhow!("连接超时，请检查 API 地址是否正确")
+                } else if e.is_connect() {
+                    anyhow!("无法连接到服务器，请检查 API 地址: {}", e)
+                } else {
+                    anyhow!("请求失败: {}", e)
+                }
+            })?;
+
+        let status = resp.status();
+        let body = resp.text().await.map_err(|e| anyhow!("读取响应失败: {}", e))?;
+
+        if status.as_u16() == 401 {
+            return Err(anyhow!("API Key 无效（401 Unauthorized）"));
+        }
+        if status.as_u16() == 404 {
+            return Err(anyhow!("API 地址不存在（404），请检查 base_url 是否正确"));
+        }
+        if !status.is_success() {
+            return Err(anyhow!("API 返回错误 ({}): {}", status.as_u16(), &body[..200.min(body.len())]));
+        }
+
+        let response: ChatCompletionResponse = serde_json::from_str(&body)
+            .map_err(|e| anyhow!("响应解析失败: {}，可能不是标准 OpenAI 兼容 API", e))?;
+
+        let reply = response.choices.first()
+            .and_then(|c| c.message.as_ref())
+            .and_then(|m| m.content.clone())
+            .unwrap_or_default();
+
+        let model_info = response.id.unwrap_or_default();
+        Ok(format!("模型 {} 连接正常。回复: {}", 
+            if model_info.is_empty() { &config.model_name } else { &model_info },
+            reply.trim()
+        ))
+    }
+
+    /// 判断选股工具返回结果是否为空（基于 JSON 解析，避免字符串匹配的格式敏感问题）
+    fn is_empty_search_result(result: &str) -> bool {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(result) {
+            // 匹配 total_count == 0（search_stocks_by_condition 的标准字段）
+            if json.get("total_count").and_then(|v| v.as_u64()) == Some(0) {
+                return true;
+            }
+            // 兜底：stocks 数组为空
+            if json.get("stocks").and_then(|v| v.as_array()).map_or(false, |a| a.is_empty()) {
+                return true;
+            }
+            // 兜底：存在 error 字段
+            if json.get("error").is_some() {
+                return true;
+            }
+        }
+        result.contains("未找到")
+    }
+
     /// Batch generate instructions for all stocks in a strategy zone.
     /// (保持原有功能不变)
     pub async fn batch_generate_instructions(
         config: &AIConfig,
         stocks: &[StockSummaryForAI],
-    ) -> Result<Vec<StockInstructionResult>> {
+    ) -> Result<(Vec<StockInstructionResult>, Option<TokenUsage>)> {
         if stocks.is_empty() {
-            return Ok(vec![]);
+            return Ok((vec![], None));
         }
 
         let client = build_ai_client(config.timeout_secs)?;
@@ -75,6 +158,8 @@ impl AIService {
         let response: ChatCompletionResponse = serde_json::from_str(&body)
             .map_err(|e| anyhow!("AI response parse error: {} body: {}", e, &body[..200.min(body.len())]))?;
 
+        let token_usage = response.usage.clone();
+
         let content = response.choices.first()
             .and_then(|c| c.message.as_ref())
             .and_then(|m| m.content.clone())
@@ -84,7 +169,7 @@ impl AIService {
         let instructions: Vec<StockInstructionResult> = serde_json::from_str(&json_str)
             .map_err(|e| anyhow!("Instruction parse error: {} content: {}", e, &json_str[..200.min(json_str.len())]))?;
 
-        Ok(instructions)
+        Ok((instructions, token_usage))
     }
 
     /// Agent 模式：带工具调用的 AI 股票分析
@@ -434,6 +519,7 @@ impl AIService {
         config: &AIConfig,
         qgqp_b_id: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
+        cancel: Arc<AtomicBool>,
     ) -> Result<(String, Option<TokenUsage>)> {
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -533,33 +619,66 @@ impl AIService {
         let mut total_usage: Option<TokenUsage> = None;
         let mut empty_search_count: u32 = 0; // 连续空结果计数
         let mut reflection_injected = false;  // 反思提示是否已注入
+        let mut budget_exceeded = false;      // token 预算是否已超限
 
         // Phase 1: Tool calling loop
         for _round in 0..MAX_PICK_TOOL_ROUNDS {
+            // 取消检查
+            if cancel.load(Ordering::SeqCst) {
+                return Err(anyhow!("用户取消了 AI 选股"));
+            }
+            // Token 预算闸门：超出预算时跳出循环进入最终输出
+            if budget_exceeded {
+                break;
+            }
+            if let Some(ref u) = total_usage {
+                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                    log::warn!("AI 选股 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
+                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                    messages.push(ChatMessage::user(
+                        "token预算已接近上限，请在本轮直接给出最终分析报告和选股推荐，不要再调用工具。"
+                    ));
+                    budget_exceeded = true;
+                }
+            }
+
             let req = ChatCompletionRequest {
                 model: config.model_name.clone(),
                 messages: messages.clone(),
                 max_tokens: Some(config.max_tokens),
-                temperature: Some(config.temperature),
+                temperature: Some(config.pick_temperature),
                 stream: Some(false),
                 tools: Some(tools.clone()),
                 tool_choice: None,
             };
 
-            let resp = client
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", config.api_key))
-                .header("Content-Type", "application/json")
-                .json(&req)
-                .send()
-                .await?;
+            let req_json = serde_json::to_value(&req)
+                .map_err(|e| anyhow!("Failed to serialize request: {}", e))?;
+            let body = {
+                let client_ref = &client;
+                let url_ref = &url;
+                let api_key = &config.api_key;
+                let req_json_ref = &req_json;
+                retry_with_backoff(2, || async {
+                    let resp = client_ref
+                        .post(url_ref.as_str())
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(req_json_ref)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("AI API request failed: {}", e))?;
 
-            if !resp.status().is_success() {
-                let body = resp.text().await?;
-                return Err(anyhow!("AI API error: {}", body));
-            }
+                    if !resp.status().is_success() {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        return Err(anyhow!("AI API error ({}): {}", status.as_u16(), body));
+                    }
 
-            let body = resp.text().await?;
+                    resp.text().await.map_err(|e| anyhow!("Read response body failed: {}", e))
+                }).await?
+            };
+
             let response: ChatCompletionResponse = serde_json::from_str(&body)
                 .map_err(|e| anyhow!("AI response parse error: {} body: {}", e, &body[..500.min(body.len())]))?;
 
@@ -623,7 +742,7 @@ impl AIService {
 
                     // 空结果反思兜底：仅针对 search_stocks_by_condition，连续2次空结果注入提示
                     if tool_name == "search_stocks_by_condition" {
-                        let is_empty = result.contains("\"total\":0") || result.contains("\"total\": 0") || result.contains("未找到");
+                        let is_empty = Self::is_empty_search_result(&result);
                         if is_empty {
                             empty_search_count += 1;
                         } else {
@@ -674,6 +793,10 @@ impl AIService {
         }
 
         // Phase 2: Stream the final analysis
+        // 取消检查
+        if cancel.load(Ordering::SeqCst) {
+            return Err(anyhow!("用户取消了 AI 选股"));
+        }
         let last_is_assistant = messages.last().map_or(false, |m| m.role == "assistant" && m.content.is_some());
         if last_is_assistant {
             messages.pop();
@@ -687,7 +810,7 @@ impl AIService {
             model: config.model_name.clone(),
             messages: messages.clone(),
             max_tokens: Some(pick_max_tokens),
-            temperature: Some(config.temperature),
+            temperature: Some(config.pick_temperature),
             stream: Some(true),
             tools: None,
             tool_choice: None,
@@ -711,6 +834,10 @@ impl AIService {
         let mut dsml_detected = false;
 
         while let Some(chunk) = stream.next().await {
+            // 流式阶段取消检查
+            if cancel.load(Ordering::SeqCst) {
+                break;
+            }
             let chunk = chunk?;
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -835,33 +962,62 @@ impl AIService {
 
         let mut full_content = String::new();
         let mut total_usage: Option<TokenUsage> = None;
+        let mut budget_exceeded = false;
 
         // Phase 1: Tool calling loop (reuse same pattern as ai_pick)
         for _round in 0..MAX_PICK_TOOL_ROUNDS {
+            // Token 预算闸门
+            if budget_exceeded {
+                break;
+            }
+            if let Some(ref u) = total_usage {
+                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                    log::warn!("找相似股 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
+                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                    messages.push(ChatMessage::user(
+                        "token预算已接近上限，请在本轮直接给出最终分析报告和推荐，不要再调用工具。"
+                    ));
+                    budget_exceeded = true;
+                }
+            }
+
             let req = ChatCompletionRequest {
                 model: config.model_name.clone(),
                 messages: messages.clone(),
                 max_tokens: Some(config.max_tokens),
-                temperature: Some(config.temperature),
+                temperature: Some(config.pick_temperature),
                 stream: Some(false),
                 tools: Some(tools.clone()),
                 tool_choice: None,
             };
 
-            let resp = client
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", config.api_key))
-                .header("Content-Type", "application/json")
-                .json(&req)
-                .send()
-                .await?;
+            let req_json = serde_json::to_value(&req)
+                .map_err(|e| anyhow!("Failed to serialize request: {}", e))?;
+            let body = {
+                let client_ref = &client;
+                let url_ref = &url;
+                let api_key = &config.api_key;
+                let req_json_ref = &req_json;
+                retry_with_backoff(2, || async {
+                    let resp = client_ref
+                        .post(url_ref.as_str())
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(req_json_ref)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("AI API request failed: {}", e))?;
 
-            if !resp.status().is_success() {
-                let body = resp.text().await?;
-                return Err(anyhow!("AI API error: {}", body));
-            }
+                    if !resp.status().is_success() {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        return Err(anyhow!("AI API error ({}): {}", status.as_u16(), body));
+                    }
 
-            let body = resp.text().await?;
+                    resp.text().await.map_err(|e| anyhow!("Read response body failed: {}", e))
+                }).await?
+            };
+
             let response: ChatCompletionResponse = serde_json::from_str(&body)
                 .map_err(|e| anyhow!("AI response parse error: {} body: {}", e, &body[..500.min(body.len())]))?;
 
@@ -958,7 +1114,7 @@ impl AIService {
             model: config.model_name.clone(),
             messages: messages.clone(),
             max_tokens: Some(similar_max_tokens),
-            temperature: Some(config.temperature),
+            temperature: Some(config.pick_temperature),
             stream: Some(true),
             tools: None,
             tool_choice: None,
