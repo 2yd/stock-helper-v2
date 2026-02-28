@@ -3,6 +3,7 @@ use crate::models::stock::MarketStockSnapshot;
 use crate::utils::http::build_stock_client;
 
 /// 全市场扫描器：通过东方财富 API 获取沪深A股全量多维度数据
+/// 当东财接口不可用时（非交易时间/限流），自动 fallback 到腾讯行情接口
 pub struct MarketScanner {
     client: reqwest::Client,
 }
@@ -44,10 +45,6 @@ impl MarketScanner {
     }
 
     async fn fetch_page(&self, page: u32) -> Result<Vec<MarketStockSnapshot>> {
-        // fs 参数: m:0 t:6 (深市主板) + m:0 t:80 (深市创业板) + m:1 t:2 (沪市主板) + m:1 t:23 (沪市创业板科创板?)
-        // 实际上沪市创业板不存在，t:23 是上证科创板
-        // 沪深主板+创业板: m:0 t:6, m:0 t:80, m:1 t:2, m:1 t:23 去掉科创板
-        // 只要主板+创业板: m:0 t:6 (深主板), m:0 t:80 (创业板), m:1 t:2 (沪主板)
         let fs = "m:0+t:6,m:0+t:80,m:1+t:2";
         let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f37,f115,f62";
 
@@ -56,10 +53,22 @@ impl MarketScanner {
             page, fs, fields
         );
 
-        let resp = self.client.get(&url)
+        let text = match self.client.get(&url)
             .header("Referer", "https://quote.eastmoney.com/")
-            .send().await?;
-        let text = resp.text().await?;
+            .send().await
+        {
+            Ok(resp) => resp.text().await.unwrap_or_default(),
+            Err(e) => {
+                log::warn!("东财全市场接口请求失败: {}，返回空列表", e);
+                return Ok(vec![]);
+            }
+        };
+
+        if text.is_empty() {
+            log::warn!("东财全市场接口返回空响应（可能非交易时间），page={}", page);
+            return Ok(vec![]);
+        }
+
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| anyhow!("东方财富数据解析失败: {}", e))?;
 
@@ -85,12 +94,25 @@ impl MarketScanner {
     }
 
     /// 按代码列表获取多维度快照数据（PE/PB/ROE/市值/换手率/量比/主力净流入等）
-    /// 使用东方财富 ulist.np API，支持指定 secids
+    /// 优先东方财富 ulist.np，失败时 fallback 到腾讯 qt.gtimg.cn
     pub async fn fetch_stocks_by_codes(&self, codes: &[String]) -> Result<Vec<MarketStockSnapshot>> {
         if codes.is_empty() {
             return Ok(vec![]);
         }
 
+        // 尝试东财
+        match self.fetch_stocks_by_codes_eastmoney(codes).await {
+            Ok(stocks) if !stocks.is_empty() => return Ok(stocks),
+            Ok(_) => log::info!("东财 ulist 返回空，fallback 腾讯行情"),
+            Err(e) => log::warn!("东财 ulist 失败: {}，fallback 腾讯行情", e),
+        }
+
+        // Fallback: 腾讯
+        self.fetch_stocks_by_codes_tencent(codes).await
+    }
+
+    /// 东财 ulist.np 接口
+    async fn fetch_stocks_by_codes_eastmoney(&self, codes: &[String]) -> Result<Vec<MarketStockSnapshot>> {
         let secids: Vec<String> = codes.iter().map(|c| code_to_secid(c)).collect();
         let secid_str = secids.join(",");
         let fields = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f26,f37,f115,f62";
@@ -103,7 +125,12 @@ impl MarketScanner {
         let resp = self.client.get(&url)
             .header("Referer", "https://quote.eastmoney.com/")
             .send().await?;
-        let json: serde_json::Value = resp.json().await?;
+        let text = resp.text().await?;
+        if text.is_empty() {
+            return Ok(vec![]);
+        }
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| anyhow!("东财数据解析失败: {}", e))?;
 
         let mut stocks = Vec::new();
         if let Some(data) = json.get("data") {
@@ -121,14 +148,40 @@ impl MarketScanner {
         Ok(stocks)
     }
 
+    /// 腾讯行情接口 fallback（qt.gtimg.cn）
+    /// 字段较少（无 ROE/营收增速/主力资金流向），但基础价格数据齐全且非交易时间也能用
+    async fn fetch_stocks_by_codes_tencent(&self, codes: &[String]) -> Result<Vec<MarketStockSnapshot>> {
+        // 腾讯接口每次最多约 50 只，分批请求
+        let mut all_stocks = Vec::new();
+        for chunk in codes.chunks(50) {
+            let symbols: Vec<String> = chunk.iter().map(|c| code_to_tencent_symbol(c)).collect();
+            let symbols_str = symbols.join(",");
+            let url = format!("https://qt.gtimg.cn/q={}", symbols_str);
+
+            let resp = self.client.get(&url)
+                .header("Referer", "https://finance.qq.com/")
+                .send().await?;
+            // 腾讯接口返回 GBK 编码，reqwest 默认按 UTF-8 读取会乱码
+            // 但数值字段不受影响，名称可能乱码
+            let bytes = resp.bytes().await?;
+            let (text, _, _) = encoding_rs::GBK.decode(&bytes);
+
+            for line in text.lines() {
+                if let Some(stock) = parse_tencent_quote(line) {
+                    all_stocks.push(stock);
+                }
+            }
+        }
+        Ok(all_stocks)
+    }
+
     /// 拉取个股资金流向数据（主力净流入），合并到快照中
-    /// 这是一个补充接口，用于弥补 clist 中 f62 可能不准确的问题
+    /// 东财失败时优雅降级，返回空列表（腾讯无资金流向数据）
     pub async fn fetch_fund_flow(&self, codes: &[String]) -> Result<Vec<(String, f64, f64)>> {
         if codes.is_empty() {
             return Ok(vec![]);
         }
 
-        // 构建 secids: "1.600000,0.000001,..."
         let secids: Vec<String> = codes.iter().map(|c| code_to_secid(c)).collect();
         let secid_str = secids.join(",");
 
@@ -137,10 +190,29 @@ impl MarketScanner {
             secid_str
         );
 
-        let resp = self.client.get(&url)
+        let text = match self.client.get(&url)
             .header("Referer", "https://quote.eastmoney.com/")
-            .send().await?;
-        let json: serde_json::Value = resp.json().await?;
+            .send().await
+        {
+            Ok(resp) => resp.text().await.unwrap_or_default(),
+            Err(e) => {
+                log::warn!("东财资金流向接口请求失败: {}，跳过", e);
+                return Ok(vec![]);
+            }
+        };
+
+        if text.is_empty() {
+            log::warn!("东财资金流向接口返回空响应（可能非交易时间），跳过");
+            return Ok(vec![]);
+        }
+
+        let json: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("东财资金流向数据解析失败: {}，跳过", e);
+                return Ok(vec![]);
+            }
+        };
 
         let mut results = Vec::new();
         if let Some(data) = json.get("data") {
@@ -216,6 +288,105 @@ pub fn parse_eastmoney_item_public(item: &serde_json::Value) -> Option<MarketSto
     })
 }
 
+/// 解析腾讯行情接口返回的单行数据
+/// 格式: v_sz000002="51~万  科Ａ~000002~4.84~4.82~4.83~1132768~..."
+/// 字段以 ~ 分隔，索引含义：
+///   [1]=名称, [2]=代码, [3]=最新价, [4]=昨收, [5]=今开,
+///   [6]=成交量(手), [32]=涨跌额, [33]=涨跌幅%, [34]=最高, [35]=最低,
+///   [38]=成交额(万), [39]=换手率%, [44]=振幅%,
+///   [45]=总市值(亿), [46]=流通市值(亿), [47]=PE(TTM),
+///   [49]=PB (?), [50]=量比
+fn parse_tencent_quote(line: &str) -> Option<MarketStockSnapshot> {
+    // 格式: v_sz000002="51~...~";\n
+    let line = line.trim();
+    if line.is_empty() || !line.starts_with("v_") {
+        return None;
+    }
+
+    // 提取市场前缀 (sz/sh)
+    let prefix = if line.starts_with("v_sz") {
+        "sz"
+    } else if line.starts_with("v_sh") {
+        "sh"
+    } else {
+        return None;
+    };
+
+    // 提取引号内的内容
+    let start = line.find('"')? + 1;
+    let end = line.rfind('"')?;
+    if start >= end {
+        return None;
+    }
+    let content = &line[start..end];
+    let fields: Vec<&str> = content.split('~').collect();
+
+    if fields.len() < 50 {
+        return None;
+    }
+
+    let code_num = fields.get(2)?;
+    let price: f64 = fields.get(3)?.parse().ok()?;
+    if price <= 0.0 {
+        return None;
+    }
+
+    let code = format!("{}{}", prefix, code_num);
+    let name = fields.get(1).unwrap_or(&"").to_string();
+
+    let pre_close = parse_field(fields.get(4));
+    let open = parse_field(fields.get(5));
+    let volume = parse_field(fields.get(6)); // 手
+    let change_amount = parse_field(fields.get(32));
+    let change_pct = parse_field(fields.get(33));
+    let high = parse_field(fields.get(34));
+    let low = parse_field(fields.get(35));
+    let amount = parse_field(fields.get(38)) * 10_000.0; // 万 → 元
+    let turnover_rate = parse_field(fields.get(39));
+    let amplitude = parse_field(fields.get(44));
+    let total_market_cap = parse_field(fields.get(45)) * 100_000_000.0; // 亿 → 元
+    let float_market_cap = parse_field(fields.get(46)) * 100_000_000.0; // 亿 → 元
+    let pe_ttm = parse_field(fields.get(47));
+    let pb = parse_field(fields.get(49));
+    let volume_ratio = parse_field(fields.get(50));
+
+    Some(MarketStockSnapshot {
+        code,
+        name,
+        price,
+        change_pct,
+        change_amount,
+        volume,
+        amount,
+        amplitude,
+        turnover_rate,
+        pe_ttm,
+        volume_ratio,
+        high,
+        low,
+        open,
+        pre_close,
+        total_market_cap,
+        float_market_cap,
+        pb,
+        pct_5d: 0.0,           // 腾讯接口无此字段
+        pct_20d: 0.0,
+        pct_60d: 0.0,
+        roe: 0.0,              // 腾讯接口无此字段
+        gross_margin: 0.0,
+        revenue_yoy: 0.0,
+        profit_yoy: 0.0,
+        main_net_inflow: 0.0,  // 腾讯接口无此字段
+        main_net_pct: 0.0,
+        list_date: String::new(),
+    })
+}
+
+/// 安全解析浮点数
+fn parse_field(field: Option<&&str>) -> f64 {
+    field.and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0)
+}
+
 fn get_f64(item: &serde_json::Value, key: &str) -> f64 {
     item.get(key)
         .and_then(|v| {
@@ -240,5 +411,18 @@ fn code_to_secid(code: &str) -> String {
         format!("0.{}", &code[2..])
     } else {
         format!("0.{}", code)
+    }
+}
+
+/// 转换股票代码为腾讯行情接口格式
+/// "sh600519" → "sh600519", "sz000002" → "sz000002", "000002" → "sz000002"
+fn code_to_tencent_symbol(code: &str) -> String {
+    let code = code.to_lowercase();
+    if code.starts_with("sh") || code.starts_with("sz") {
+        code
+    } else if code.starts_with("6") {
+        format!("sh{}", code)
+    } else {
+        format!("sz{}", code)
     }
 }
