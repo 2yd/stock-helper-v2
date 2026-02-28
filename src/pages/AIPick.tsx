@@ -617,7 +617,7 @@ function RecommendationCard({
             {ratingCfg.label}
           </span>
           {rec.sector && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-txt-muted border border-[#30363D]/50">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#282E36] text-[#9CA3AF] border border-[#3B424D]">
               {rec.sector}
             </span>
           )}

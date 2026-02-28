@@ -51,6 +51,7 @@ pub fn run() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::stock_cmd::get_realtime_data,
             commands::stock_cmd::get_kline_data,

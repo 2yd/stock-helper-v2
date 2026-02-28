@@ -5,6 +5,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { Tooltip } from 'antd';
+import { open } from '@tauri-apps/plugin-shell';
 import { useNewsStore, type NewsTab } from '../stores/newsStore';
 
 const TAB_CONFIG: { key: NewsTab; label: string; icon: React.ReactNode; color: string }[] = [
@@ -85,7 +86,7 @@ export default function NewsCenter() {
     : reportLoading;
 
   const openUrl = (url: string) => {
-    if (url) window.open(url, '_blank');
+    if (url) open(url).catch(console.error);
   };
 
   const formatTime = (t: string) => {
