@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { init, dispose } from 'klinecharts';
+import { init, dispose, LineType, CandleType } from 'klinecharts';
 import type { Chart } from 'klinecharts';
 import { KlineItem, TechnicalIndicators } from '../types';
 
@@ -40,11 +40,11 @@ export default function KlineChart({
       styles: {
         grid: {
           show: true,
-          horizontal: { color: 'rgba(28,35,51,0.6)', style: 'dashed' as const },
-          vertical: { color: 'rgba(28,35,51,0.6)', style: 'dashed' as const },
+          horizontal: { color: 'rgba(28,35,51,0.6)', style: LineType.Dashed },
+          vertical: { color: 'rgba(28,35,51,0.6)', style: LineType.Dashed },
         },
         candle: {
-          type: 'candle_solid' as const,
+          type: CandleType.CandleSolid,
           bar: {
             upColor: '#E74C3C',
             downColor: '#2ECC71',
@@ -85,8 +85,8 @@ export default function KlineChart({
         },
         crosshair: {
           show: true,
-          horizontal: { line: { color: '#484F58', style: 'dashed' as const } },
-          vertical: { line: { color: '#484F58', style: 'dashed' as const } },
+          horizontal: { line: { color: '#484F58', style: LineType.Dashed } },
+          vertical: { line: { color: '#484F58', style: LineType.Dashed } },
         },
         separator: { color: '#30363D' },
       },

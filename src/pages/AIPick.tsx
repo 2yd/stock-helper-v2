@@ -439,7 +439,7 @@ function LeftAnalysisPanel({
 }) {
   return (
     <div
-      ref={contentRef}
+      ref={contentRef as React.RefObject<HTMLDivElement>}
       onScroll={onScroll}
       className="w-[380px] h-full flex-shrink-0 border-r border-[#30363D] overflow-y-auto"
     >
