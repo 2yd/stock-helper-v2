@@ -232,68 +232,17 @@ export interface StockTechnicalAnalysis {
   summary: string;
 }
 
-// ====== Backtest Types ======
+// ====== AI Pick Tracking Types ======
 
-export interface BacktestConfig {
-  codes: string[];
-  start_date: string;
-  end_date: string;
-  initial_capital: number;
-  commission_rate: number;
-  slippage: number;
-  buy_threshold: number;
-  sell_threshold: number;
-  stop_loss: number;
-  take_profit: number;
-  factor_weights: FactorWeights;
-  max_position_pct: number;
-}
-
-export interface BacktestPerformance {
-  total_return: number;
-  annual_return: number;
-  max_drawdown: number;
-  sharpe_ratio: number;
-  win_rate: number;
-  profit_loss_ratio: number;
-  total_trades: number;
-  winning_trades: number;
-  losing_trades: number;
-  max_consecutive_wins: number;
-  max_consecutive_losses: number;
-  avg_holding_days: number;
-  benchmark_return: number;
-  alpha: number;
-}
-
-export interface EquityPoint {
-  date: string;
-  equity: number;
-  benchmark: number;
-  drawdown: number;
-}
-
-export interface BacktestTrade {
-  id: number;
+export interface AIPickTracking {
   code: string;
   name: string;
-  direction: string;
-  open_date: string;
-  open_price: number;
-  close_date: string;
-  close_price: number;
-  shares: number;
-  profit: number;
-  profit_pct: number;
-  holding_days: number;
-  commission: number;
-}
-
-export interface BacktestResult {
-  config: BacktestConfig;
-  performance: BacktestPerformance;
-  equity_curve: EquityPoint[];
-  trades: BacktestTrade[];
+  added_date: string;
+  added_price: number;
+  rating: string;
+  reason: string;
+  sector: string;
+  created_at: string;
 }
 
 // ====== News / Info Types ======

@@ -3,11 +3,10 @@ import AIPick from './pages/AIPick';
 import Settings from './pages/Settings';
 import SmartStock from './pages/SmartStock';
 import Watchlist from './pages/Watchlist';
-import Backtest from './pages/Backtest';
 import NewsCenter from './pages/NewsCenter';
-import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Search, Brain, Eye, FlaskConical, Newspaper } from 'lucide-react';
+import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Search, Brain, Eye, Newspaper } from 'lucide-react';
 
-type Page = 'board' | 'settings' | 'smart' | 'watchlist' | 'backtest' | 'news';
+type Page = 'board' | 'settings' | 'smart' | 'watchlist' | 'news';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('smart');
@@ -69,17 +68,6 @@ export default function App() {
               盯盘
             </button>
             <button
-              onClick={() => setCurrentPage('backtest')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
-                currentPage === 'backtest'
-                  ? 'bg-amber-600/20 text-amber-300 border border-amber-500/30'
-                  : 'text-txt-secondary hover:text-txt-primary hover:bg-bg-elevated'
-              }`}
-            >
-              <FlaskConical size={13} />
-              回测
-            </button>
-            <button
               onClick={() => setCurrentPage('news')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
                 currentPage === 'news'
@@ -112,8 +100,6 @@ export default function App() {
           <AIPick />
         ) : currentPage === 'watchlist' ? (
           <Watchlist />
-        ) : currentPage === 'backtest' ? (
-          <Backtest />
         ) : currentPage === 'news' ? (
           <NewsCenter />
         ) : (

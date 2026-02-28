@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare } from 'lucide-react';
+import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import KlineChart from '../components/KlineChart';
@@ -7,7 +7,9 @@ import TechnicalPanel from '../components/TechnicalPanel';
 import WatchlistDiagnosePanel from '../components/WatchlistDiagnosePanel';
 import { useAIPickStore } from '../stores/aiPickStore';
 import { useWatchlistStore } from '../stores/watchlistStore';
+import { useTrackingStore } from '../stores/trackingStore';
 import { AIPickRecommendation } from '../types';
+import { safeInvoke as invoke } from '../hooks/useTauri';
 
 type ViewMode = 'list' | 'detail';
 
@@ -94,6 +96,30 @@ export default function AIPick() {
     if (similarLoading) return;
     findSimilarStocks(rec.code, rec.name, rec.sector || '');
   }, [similarLoading, findSimilarStocks]);
+
+  const { addTracking, trackingStocks } = useTrackingStore();
+
+  const handleAddTracking = useCallback(async (e: React.MouseEvent, rec: AIPickRecommendation) => {
+    e.stopPropagation();
+    let price = rec.price || 0;
+    // 如果 AI 没返回价格，通过行情接口获取实时价格
+    if (!price) {
+      try {
+        const snapshots = await invoke<{ code: string; price: number }[]>('get_watchlist_enriched', { codes: [rec.code] });
+        if (snapshots && snapshots.length > 0 && snapshots[0].price > 0) {
+          price = snapshots[0].price;
+        }
+      } catch { /* ignore */ }
+    }
+    await addTracking(
+      rec.code,
+      rec.name,
+      price,
+      rec.rating,
+      rec.reason,
+      rec.sector || '',
+    );
+  }, [addTracking]);
 
   const displayContent = aiContent
     .replace(/<PICKS>[\s\S]*?<\/PICKS>/g, '')  // 清理完整闭合的 <PICKS> 块
@@ -196,6 +222,8 @@ export default function AIPick() {
             onStockClick={handleStockClick}
             onFindSimilar={handleFindSimilar}
             onStartPick={handleStartPick}
+            onAddTracking={handleAddTracking}
+            trackingStocks={trackingStocks}
           />
         </div>
       )}
@@ -455,6 +483,8 @@ function RightRecommendationPanel({
   onStockClick,
   onFindSimilar,
   onStartPick,
+  onAddTracking,
+  trackingStocks,
 }: {
   recommendations: AIPickRecommendation[];
   error: string | null;
@@ -463,22 +493,32 @@ function RightRecommendationPanel({
   onStockClick: (rec: AIPickRecommendation) => void;
   onFindSimilar: (e: React.MouseEvent, rec: AIPickRecommendation) => void;
   onStartPick: () => void;
+  onAddTracking: (e: React.MouseEvent, rec: AIPickRecommendation) => void;
+  trackingStocks: { code: string; added_date: string }[];
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="flex-1 h-full min-w-0 overflow-y-auto">
       {recommendations.length > 0 ? (
         <div className="p-3">
           <div className="space-y-2">
-            {recommendations.map((rec, i) => (
-              <RecommendationCard
-                key={rec.code || i}
-                rec={rec}
-                index={i}
-                onClick={() => onStockClick(rec)}
-                onFindSimilar={(e) => onFindSimilar(e, rec)}
-                similarLoading={similarLoading && similarTarget?.code === rec.code}
-              />
-            ))}
+            {recommendations.map((rec, i) => {
+              const alreadyTracked = trackingStocks.some(
+                (t) => t.code === rec.code && t.added_date === today,
+              );
+              return (
+                <RecommendationCard
+                  key={rec.code || i}
+                  rec={rec}
+                  index={i}
+                  onClick={() => onStockClick(rec)}
+                  onFindSimilar={(e) => onFindSimilar(e, rec)}
+                  similarLoading={similarLoading && similarTarget?.code === rec.code}
+                  onAddTracking={(e) => onAddTracking(e, rec)}
+                  alreadyTracked={alreadyTracked}
+                />
+              );
+            })}
           </div>
         </div>
       ) : error ? (
@@ -511,12 +551,16 @@ function RecommendationCard({
   onClick,
   onFindSimilar,
   similarLoading,
+  onAddTracking,
+  alreadyTracked,
 }: {
   rec: AIPickRecommendation;
   index: number;
   onClick: () => void;
   onFindSimilar: (e: React.MouseEvent) => void;
   similarLoading?: boolean;
+  onAddTracking: (e: React.MouseEvent) => void;
+  alreadyTracked?: boolean;
 }) {
   const ratingCfg = RATING_CONFIG[rec.rating] || RATING_CONFIG.watch;
   const changePct = rec.change_pct;
@@ -577,6 +621,19 @@ function RecommendationCard({
           >
             {similarLoading ? <Loader2 size={9} className="animate-spin" /> : <Users size={9} />}
             找相似股
+          </button>
+          {/* Add to Tracking Button */}
+          <button
+            onClick={onAddTracking}
+            disabled={alreadyTracked}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+              alreadyTracked
+                ? 'text-green-400 bg-green-500/10 border border-green-500/20 opacity-70'
+                : 'text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            {alreadyTracked ? <Check size={9} /> : <Eye size={9} />}
+            {alreadyTracked ? '已盯盘' : '加入盯盘'}
           </button>
         </div>
       </div>

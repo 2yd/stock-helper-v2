@@ -112,8 +112,8 @@ export default function KlineChart({
 
     chart.applyNewData(data);
 
-    // Always show volume
-    chart.createIndicator('VOL', false, { id: 'candle_pane' });
+    // Show volume in a separate sub-pane
+    chart.createIndicator('VOL', true);
 
     return () => {
       if (containerRef.current) {

@@ -79,8 +79,6 @@ pub fn run() {
             commands::watchlist_cmd::reorder_watchlist,
             commands::watchlist_cmd::get_stock_technical_analysis,
             commands::watchlist_cmd::ai_diagnose_stock,
-            commands::backtest_cmd::run_backtest,
-            commands::backtest_cmd::fetch_history_kline,
             commands::news_cmd::fetch_cls_telegraph,
             commands::news_cmd::fetch_eastmoney_news,
             commands::news_cmd::fetch_stock_news,
@@ -90,6 +88,10 @@ pub fn run() {
             commands::ai_pick_cmd::ai_pick_stocks,
             commands::ai_pick_cmd::get_cached_picks,
             commands::ai_pick_cmd::find_similar_stocks,
+            commands::tracking_cmd::add_tracking_stock,
+            commands::tracking_cmd::remove_tracking_stock,
+            commands::tracking_cmd::get_tracking_stocks,
+            commands::tracking_cmd::clear_tracking_by_date,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

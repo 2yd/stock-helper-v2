@@ -7,6 +7,7 @@ use crate::models::ai::AIAnalysisResult;
 use crate::models::settings::AppSettings;
 use crate::models::stock::StockDailyHistory;
 use crate::models::watchlist::WatchlistStock;
+use crate::models::tracking::AIPickTracking;
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -89,6 +90,20 @@ impl Database {
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS ai_pick_tracking (
+                code TEXT NOT NULL,
+                name TEXT NOT NULL,
+                added_date TEXT NOT NULL,
+                added_price REAL NOT NULL,
+                rating TEXT NOT NULL DEFAULT 'watch',
+                reason TEXT NOT NULL DEFAULT '',
+                sector TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (code, added_date)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tracking_date ON ai_pick_tracking(added_date);
             ",
         )?;
         Ok(())
@@ -394,5 +409,58 @@ impl Database {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    // ====== AI Pick Tracking Methods ======
+
+    pub fn add_tracking_stock(&self, tracking: &AIPickTracking) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO ai_pick_tracking (code, name, added_date, added_price, rating, reason, sector, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![tracking.code, tracking.name, tracking.added_date, tracking.added_price, tracking.rating, tracking.reason, tracking.sector, tracking.created_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_tracking_stock(&self, code: &str, added_date: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM ai_pick_tracking WHERE code = ?1 AND added_date = ?2",
+            rusqlite::params![code, added_date],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_tracking_stocks(&self) -> Result<Vec<AIPickTracking>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT code, name, added_date, added_price, rating, reason, sector, created_at FROM ai_pick_tracking ORDER BY added_date DESC, created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(AIPickTracking {
+                code: row.get(0)?,
+                name: row.get(1)?,
+                added_date: row.get(2)?,
+                added_price: row.get(3)?,
+                rating: row.get(4)?,
+                reason: row.get(5)?,
+                sector: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+        Ok(results)
+    }
+
+    pub fn clear_tracking_by_date(&self, date: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM ai_pick_tracking WHERE added_date = ?1",
+            rusqlite::params![date],
+        )?;
+        Ok(())
     }
 }
