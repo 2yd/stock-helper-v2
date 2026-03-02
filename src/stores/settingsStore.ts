@@ -28,6 +28,8 @@ const defaultSettings: AppSettings = {
   active_strategy_id: 'default',
   token_usage_today: 0,
   qgqp_b_id: '',
+  max_pick_tool_rounds: 10,
+  max_pick_token_budget: 100000,
 };
 
 interface SettingsStore {

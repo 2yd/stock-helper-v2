@@ -76,6 +76,7 @@ const TOOL_LABELS: Record<string, string> = {
   batch_get_stock_quotes: '批量查看行情',
   get_stock_quote: '查看个股行情',
   get_fund_flow: '查看资金流向',
+  batch_get_fund_flow: '批量查看资金流向',
   get_kline_data: '获取K线数据',
   get_technical_indicators: '获取技术指标',
   search_stock_news: '个股新闻搜索',

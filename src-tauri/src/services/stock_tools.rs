@@ -294,6 +294,31 @@ async fn get_fund_flow(code: &str) -> Result<String> {
     }
 }
 
+/// 批量获取资金流向（最多20只）
+async fn batch_get_fund_flow(codes: &[String]) -> Result<String> {
+    if codes.is_empty() {
+        return Ok(r#"{"error":"未提供股票代码"}"#.to_string());
+    }
+    let codes: Vec<String> = codes.iter().take(20).cloned().collect();
+    let scanner = MarketScanner::new()?;
+    let flows = scanner.fetch_fund_flow(&codes).await?;
+
+    let stocks: Vec<Value> = flows.iter().map(|(c, net_inflow, net_pct)| {
+        serde_json::json!({
+            "code": c,
+            "main_net_inflow": format_amount(*net_inflow),
+            "main_net_inflow_raw": net_inflow,
+            "main_net_pct": format!("{:.2}%", net_pct),
+        })
+    }).collect();
+
+    let result = serde_json::json!({
+        "total_count": stocks.len(),
+        "stocks": stocks,
+    });
+    Ok(serde_json::to_string(&result)?)
+}
+
 /// AI 选股专用工具定义（理性分析模式）
 pub fn get_pick_tool_definitions() -> Vec<Value> {
     vec![
@@ -441,8 +466,22 @@ pub fn get_pick_tool_definitions() -> Vec<Value> {
         serde_json::json!({
             "type": "function",
             "function": {
+                "name": "batch_get_fund_flow",
+                "description": "批量获取多只股票的资金流向数据（主力净流入金额和占比），用于验证候选股资金面。一次最多20只，推荐优先使用此工具而非逐只调用get_fund_flow",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codes": { "type": "array", "items": { "type": "string" }, "description": "股票代码数组，如[\"sh600519\",\"sz000858\"]，最多20只" }
+                    },
+                    "required": ["codes"]
+                }
+            }
+        }),
+        serde_json::json!({
+            "type": "function",
+            "function": {
                 "name": "get_fund_flow",
-                "description": "获取股票资金流向数据，包括主力净流入金额和占比",
+                "description": "获取单只股票资金流向数据，包括主力净流入金额和占比",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -534,6 +573,13 @@ pub async fn execute_pick_tool(name: &str, arguments: &str, qgqp_b_id: &str) -> 
                 .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
                 .unwrap_or_default();
             batch_get_stock_quotes(&codes).await
+        }
+        "batch_get_fund_flow" => {
+            let codes: Vec<String> = args["codes"]
+                .as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                .unwrap_or_default();
+            batch_get_fund_flow(&codes).await
         }
         "search_stock_news" => {
             let keyword = args["keyword"].as_str().unwrap_or("").to_string();
@@ -1105,6 +1151,7 @@ pub fn pick_tool_name_to_chinese(name: &str) -> &str {
         "batch_get_stock_quotes" => "批量行情",
         "get_stock_quote" => "实时行情",
         "get_fund_flow" => "资金流向",
+        "batch_get_fund_flow" => "批量资金流向",
         "get_kline_data" => "K线数据",
         "get_technical_indicators" => "技术指标",
         "search_stock_news" => "个股新闻",
@@ -1273,6 +1320,19 @@ pub fn summarize_tool_result(tool_name: &str, result: &str) -> String {
             let inflow = json["main_net_inflow"].as_str().unwrap_or("0");
             let pct = json["main_net_pct"].as_str().unwrap_or("0%");
             format!("{} 主力净流入:{} 占比:{}", code, inflow, pct)
+        }
+        "batch_get_fund_flow" => {
+            let count = json["total_count"].as_u64().unwrap_or(0);
+            let summaries: Vec<String> = json["stocks"]
+                .as_array()
+                .map(|arr| arr.iter().map(|s| {
+                    let code = s["code"].as_str().unwrap_or("");
+                    let inflow = s["main_net_inflow"].as_str().unwrap_or("0");
+                    let pct = s["main_net_pct"].as_str().unwrap_or("0%");
+                    format!("{} {}/{}", code, inflow, pct)
+                }).collect())
+                .unwrap_or_default();
+            format!("{}只股票资金流向: {}", count, summaries.join(" | "))
         }
         "get_kline_data" => {
             let code = json["code"].as_str().unwrap_or("");

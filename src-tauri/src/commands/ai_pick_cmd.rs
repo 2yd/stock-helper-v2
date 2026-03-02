@@ -38,6 +38,8 @@ pub async fn ai_pick_stocks(
         .clone();
 
     let qgqp_b_id = settings.qgqp_b_id.clone();
+    let max_tool_rounds = settings.max_pick_tool_rounds;
+    let max_token_budget = settings.max_pick_token_budget;
 
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<AIStreamEvent>(100);
 
@@ -50,7 +52,7 @@ pub async fn ai_pick_stocks(
 
     let app_for_db = app.clone();
     tokio::spawn(async move {
-        let result = AIService::ai_pick_stocks_with_tools(&config, &qgqp_b_id, sender.clone(), cancel_token).await;
+        let result = AIService::ai_pick_stocks_with_tools(&config, &qgqp_b_id, sender.clone(), cancel_token, max_tool_rounds, max_token_budget).await;
 
         // 无论成功或失败，都重置标志位
         let app_state = app_for_db.state::<AppState>();
@@ -132,6 +134,8 @@ pub async fn find_similar_stocks(
         .clone();
 
     let qgqp_b_id = settings.qgqp_b_id.clone();
+    let max_tool_rounds = settings.max_pick_tool_rounds;
+    let max_token_budget = settings.max_pick_token_budget;
 
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<crate::models::ai::AIStreamEvent>(100);
 
@@ -145,7 +149,7 @@ pub async fn find_similar_stocks(
     });
 
     tokio::spawn(async move {
-        match AIService::find_similar_stocks_with_tools(&config, &code, &name, &sector, &qgqp_b_id, sender.clone()).await {
+        match AIService::find_similar_stocks_with_tools(&config, &code, &name, &sector, &qgqp_b_id, sender.clone(), max_tool_rounds, max_token_budget).await {
             Ok((content, usage)) => {
                 let _ = sender.send(crate::models::ai::AIStreamEvent {
                     event_type: "done".to_string(),

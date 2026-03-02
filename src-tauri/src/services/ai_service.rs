@@ -8,8 +8,6 @@ use crate::utils::http::build_ai_client;
 use crate::utils::retry::retry_with_backoff;
 
 const MAX_TOOL_ROUNDS: usize = 8;
-const MAX_PICK_TOOL_ROUNDS: usize = 10;
-const MAX_PICK_TOKEN_BUDGET: u32 = 100_000;
 
 pub struct AIService;
 
@@ -520,6 +518,8 @@ impl AIService {
         qgqp_b_id: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
         cancel: Arc<AtomicBool>,
+        max_tool_rounds: usize,
+        max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -544,7 +544,7 @@ impl AIService {
             - get_global_indexes：全球主要指数行情\n\
             - get_financial_calendar：近期财经事件日历\n\
             \n\
-            **大盘/板块类**（帮你判断方向）：\n\
+            **大盘/板块类**（帮你判断方向和识别风险）：\n\
             - get_kline_data：K线数据（可用于指数或个股）\n\
             - get_technical_indicators：技术指标（MA/MACD/KDJ/RSI/BOLL）\n\
             - search_concept_boards：按关键词搜索概念板块\n\
@@ -554,11 +554,14 @@ impl AIService {
             - batch_get_stock_quotes：批量获取个股行情快照\n\
             - get_stock_quote：单只个股详细行情\n\
             \n\
+            **验证层**（候选股必须经过验证，不可跳过）：\n\
+            - batch_get_fund_flow：批量查询资金流向（最多20只，**推荐优先使用**）\n\
+            - get_fund_flow：单只股票资金流向\n\
+            \n\
             **个股深度类**（仅对 Top 3-5 候选使用，不要逐一遍历）：\n\
             - search_stock_news：个股/关键词新闻\n\
             - get_stock_notices：上市公司公告\n\
             - get_industry_report：机构研报\n\
-            - get_fund_flow：资金流向\n\
             \n\
             # 决策原则\n\
             \n\
@@ -567,6 +570,48 @@ impl AIService {
             3. **每轮调用前说明意图**：用1-2句话说明\"接下来要做什么、为什么\"，让用户理解你的思考过程。\n\
             4. **个股深入分析限 Top 3-5 只**：只对最终候选股做新闻/公告/研报查询，避免浪费。\n\
             5. **独立思考**：不要因为某概念是热门就推荐，要有你自己的分析逻辑链条。\n\
+            6. **资金面优先**：在形成候选名单后，**必须**调用 batch_get_fund_flow 或 get_fund_flow 验证资金流向，这是最重要的验证步骤，不可跳过。\n\
+            \n\
+            # 三重验证框架（核心！每只推荐股必须通过）\n\
+            \n\
+            在最终推荐前，每只候选股必须通过以下三个维度的验证：\n\
+            \n\
+            **A. 估值合理性验证**\n\
+            - PE/PB 处于行业合理区间（避免高估值在调整市中承压更大）\n\
+            - ROE > 8% 且营收有增长（基本面质量底线）\n\
+            - 低估值标的下跌空间有限，高估值标的在调整市中压力更大——优先选低估值\n\
+            \n\
+            **B. 资金流入验证（一票否决）**\n\
+            - 必须通过 batch_get_fund_flow 或 get_fund_flow 获取真实资金数据\n\
+            - **主力资金净流出的标的，严禁评为 strong_buy 或 buy**，最多给 watch\n\
+            - 资金面是最直接的预警信号，优先级高于基本面和技术面\n\
+            - 理想标的：主力净流入 > 0，且近3日资金趋势向好\n\
+            \n\
+            **C. 板块景气度验证**\n\
+            - 判断所属板块处于哪个阶段：启动期 → 加速期 → 退潮期\n\
+            - **严禁推荐处于退潮期的板块个股**（特征：板块近5日冲高回落、龙头股已见顶、资金持续流出）\n\
+            - 优先选择处于启动期的板块（特征：政策/事件催化刚出现、板块刚开始放量、多数个股尚在低位）\n\
+            - 当前市场板块轮动极快，前期热点很可能已进入调整——警惕\"看起来还在涨但实际已是末端\"的板块\n\
+            \n\
+            **验证结论**：三项全部通过 → 可评 strong_buy/buy；资金面不通过 → 最多 watch；估值或板块不通过 → 降一级评级。\n\
+            \n\
+            # 风险感知\n\
+            \n\
+            **系统性风险识别**：\n\
+            - 分析大盘（上证指数/沪深300）时，如果发现放量下跌、多板块同时走弱，应首先判断是否存在系统性风险\n\
+            - 当判定存在系统性风险时：减少推荐数量（最多3只），全部标注 watch 级别，并在报告开头醒目提示\n\
+            - 多只不同板块股票同时下跌时，优先考虑大盘系统性因素，而非个股问题\n\
+            \n\
+            **重要时间节点敏感性**：\n\
+            - 两会前后（通常3月初）：市场维稳预期但资金观望，应降低激进推荐比例\n\
+            - 财报季（4月/8月/10月）：业绩雷频发，优先推荐已披露业绩且超预期的标的\n\
+            - 重大政策窗口期（如美联储议息、国内降准降息）：增加防御性配置，减少进攻性推荐\n\
+            - 长假前（国庆/春节前一周）：资金倾向离场，应以观望为主\n\
+            - 若当前处于上述敏感时段，请在报告中明确说明，并相应调整推荐激进程度\n\
+            \n\
+            **地缘政治与事件冲击**：\n\
+            - 地缘冲突不总是利好相关板块，可能引发整体风险偏好下降\n\
+            - 需评估事件对市场情绪的**净影响**，而非简单的利好/利空判断\n\
             \n\
             # 反思机制\n\
             \n\
@@ -579,14 +624,17 @@ impl AIService {
             \n\
             - 严禁推荐当日涨停（涨幅>=9.5%）或连板股票\n\
             - 优先选择涨幅在-2%~5%之间、尚处于低位但有逻辑支撑的个股\n\
-            - 避免推荐近5日涨幅超过15%的标的，寻找同板块补涨机会\n\
+            - **近5日涨幅超过10%的标的是危险信号**（短期涨幅过大意味着回调风险高），应回避或仅给 watch\n\
+            - 严禁将\"近期涨幅大\"作为推荐理由——这是追涨杀跌的典型陷阱\n\
             - 关注基本面质量（ROE、营收增速）和合理估值\n\
+            - **资金面一票否决**：主力资金净流出的标的不得评为 buy 以上\n\
+            - 避免单维度决策：不能仅凭基本面好就推荐（可能资金在流出），也不能仅凭技术面好就推荐（可能估值过高）\n\
             \n\
             # 输出格式\n\
             \n\
             最终报告用 Markdown 格式输出，包含：\n\
-            1. **宏观环境判断**（经济周期 + 政策方向 + 外盘影响 + 大盘走势）\n\
-            2. **投资逻辑**（你的独立思考过程和看好方向）\n\
+            1. **宏观环境判断**（经济周期 + 政策方向 + 外盘影响 + 大盘走势 + 是否存在系统性风险）\n\
+            2. **投资逻辑**（你的独立思考过程和看好方向，说明板块处于什么阶段）\n\
             3. **推荐股票列表**——用以下格式包裹在 <PICKS> 标签中：\n\
             \n\
             <PICKS>\n\
@@ -594,17 +642,21 @@ impl AIService {
               {{\n\
                 \"code\": \"sh600519\",\n\
                 \"name\": \"贵州茅台\",\n\
-                \"reason\": \"推荐理由（需包含分析逻辑）\",\n\
+                \"reason\": \"推荐理由（需包含三重验证结论：估值水平+资金流向+板块阶段）\",\n\
                 \"rating\": \"buy\",\n\
                 \"sector\": \"所属概念板块\",\n\
-                \"highlights\": [\"ROE 30%\", \"营收增速 15%\"]\n\
+                \"highlights\": [\"ROE 30%\", \"营收增速 15%\"],\n\
+                \"fund_flow\": \"主力净流入2.3亿\",\n\
+                \"valuation\": \"PE 15.2 低估\"\n\
               }}\n\
             ]\n\
             </PICKS>\n\
             \n\
             rating 取值：strong_buy（强烈推荐）、buy（推荐买入）、watch（建议关注）\n\
+            fund_flow：必填，简述资金流向状态（如\"主力净流入X亿\"或\"主力净流出X亿\"）\n\
+            valuation：必填，简述估值水平（如\"PE 15.2 低估\"或\"PE 45 偏高\"）\n\
             \n\
-            4. **风险提示**\n\
+            4. **风险提示**（包括系统性风险、时间节点风险、板块轮动风险等）\n\
             \n\
             **重要**：只能通过提供的工具获取数据，禁止编造。",
             today
@@ -622,7 +674,7 @@ impl AIService {
         let mut budget_exceeded = false;      // token 预算是否已超限
 
         // Phase 1: Tool calling loop
-        for _round in 0..MAX_PICK_TOOL_ROUNDS {
+        for _round in 0..max_tool_rounds {
             // 取消检查
             if cancel.load(Ordering::SeqCst) {
                 return Err(anyhow!("用户取消了 AI 选股"));
@@ -632,9 +684,9 @@ impl AIService {
                 break;
             }
             if let Some(ref u) = total_usage {
-                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                if u.total_tokens > max_token_budget {
                     log::warn!("AI 选股 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
-                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                        u.total_tokens, max_token_budget);
                     messages.push(ChatMessage::user(
                         "token预算已接近上限，请在本轮直接给出最终分析报告和选股推荐，不要再调用工具。"
                     ));
@@ -900,6 +952,8 @@ impl AIService {
         sector: &str,
         qgqp_b_id: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
+        max_tool_rounds: usize,
+        max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -965,15 +1019,15 @@ impl AIService {
         let mut budget_exceeded = false;
 
         // Phase 1: Tool calling loop (reuse same pattern as ai_pick)
-        for _round in 0..MAX_PICK_TOOL_ROUNDS {
+        for _round in 0..max_tool_rounds {
             // Token 预算闸门
             if budget_exceeded {
                 break;
             }
             if let Some(ref u) = total_usage {
-                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                if u.total_tokens > max_token_budget {
                     log::warn!("找相似股 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
-                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                        u.total_tokens, max_token_budget);
                     messages.push(ChatMessage::user(
                         "token预算已接近上限，请在本轮直接给出最终分析报告和推荐，不要再调用工具。"
                     ));
@@ -1198,6 +1252,8 @@ impl AIService {
         loss_stocks: &[crate::models::tracking::LossStock],
         qgqp_b_id: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
+        max_tool_rounds: usize,
+        max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -1306,14 +1362,14 @@ impl AIService {
         let mut budget_exceeded = false;
 
         // Phase 1: Tool calling loop
-        for _round in 0..MAX_PICK_TOOL_ROUNDS {
+        for _round in 0..max_tool_rounds {
             if budget_exceeded {
                 break;
             }
             if let Some(ref u) = total_usage {
-                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                if u.total_tokens > max_token_budget {
                     log::warn!("败因分析 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
-                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                        u.total_tokens, max_token_budget);
                     messages.push(ChatMessage::user(
                         "token预算已接近上限，请在本轮直接给出最终败因分析报告，不要再调用工具。"
                     ));

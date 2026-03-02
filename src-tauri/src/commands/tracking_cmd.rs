@@ -75,6 +75,8 @@ pub async fn analyze_loss_reasons(
         .clone();
 
     let qgqp_b_id = settings.qgqp_b_id.clone();
+    let max_tool_rounds = settings.max_pick_tool_rounds;
+    let max_token_budget = settings.max_pick_token_budget;
 
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<AIStreamEvent>(100);
 
@@ -88,7 +90,7 @@ pub async fn analyze_loss_reasons(
     });
 
     tokio::spawn(async move {
-        match AIService::analyze_loss_reasons_with_tools(&config, &date, &loss_stocks, &qgqp_b_id, sender.clone()).await {
+        match AIService::analyze_loss_reasons_with_tools(&config, &date, &loss_stocks, &qgqp_b_id, sender.clone(), max_tool_rounds, max_token_budget).await {
             Ok((content, usage)) => {
                 let _ = sender.send(AIStreamEvent {
                     event_type: "done".to_string(),
