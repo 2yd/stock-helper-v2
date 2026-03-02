@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { safeInvoke as invoke } from '../hooks/useTauri';
-import { AIPickTracking, WatchlistQuote } from '../types';
+import { safeInvoke as invoke, safeListen } from '../hooks/useTauri';
+import { AIPickTracking, AIStreamEvent, LossStock, WatchlistQuote } from '../types';
 
 interface MarketSnapshotRaw {
   code: string;
@@ -44,12 +44,34 @@ export interface DateGroup {
   avgReturn: number;
 }
 
+interface ToolCallStatus {
+  name: string;
+  label: string;
+  done: boolean;
+  summary?: string;
+}
+
+interface ThinkingStep {
+  content: string;
+  timestamp: number;
+}
+
 interface TrackingStore {
   trackingStocks: AIPickTracking[];
   quotes: Map<string, WatchlistQuote>;
   loading: boolean;
   quotesLoading: boolean;
   _refreshTimer: ReturnType<typeof setInterval> | null;
+
+  // Loss analysis state
+  lossAnalyzing: boolean;
+  lossAnalysisContent: string;
+  lossAnalysisDate: string | null;
+  lossToolCalls: ToolCallStatus[];
+  lossThinkingSteps: ThinkingStep[];
+  lossError: string | null;
+  lossDone: boolean;
+  _lossUnlisten: (() => void) | null;
 
   loadTrackingStocks: () => Promise<void>;
   addTracking: (code: string, name: string, addedPrice: number, rating: string, reason: string, sector: string) => Promise<void>;
@@ -58,6 +80,10 @@ interface TrackingStore {
   loadQuotes: () => Promise<void>;
   startAutoRefresh: (intervalSecs: number) => void;
   stopAutoRefresh: () => void;
+
+  // Loss analysis actions
+  startLossAnalysis: (date: string, lossStocks: LossStock[]) => Promise<void>;
+  closeLossAnalysis: () => void;
 
   // Computed
   getDateGroups: () => DateGroup[];
@@ -69,6 +95,16 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
   loading: false,
   quotesLoading: false,
   _refreshTimer: null,
+
+  // Loss analysis initial state
+  lossAnalyzing: false,
+  lossAnalysisContent: '',
+  lossAnalysisDate: null,
+  lossToolCalls: [],
+  lossThinkingSteps: [],
+  lossError: null,
+  lossDone: false,
+  _lossUnlisten: null,
 
   loadTrackingStocks: async () => {
     set({ loading: true });
@@ -153,6 +189,124 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
       clearInterval(_refreshTimer);
       set({ _refreshTimer: null });
     }
+  },
+
+  startLossAnalysis: async (date: string, lossStocks: LossStock[]) => {
+    // 先清理旧监听和状态，防止日期切换时状态污染
+    const { _lossUnlisten } = get();
+    if (_lossUnlisten) {
+      _lossUnlisten();
+    }
+
+    set({
+      lossAnalyzing: true,
+      lossAnalysisContent: '',
+      lossAnalysisDate: date,
+      lossToolCalls: [],
+      lossThinkingSteps: [],
+      lossError: null,
+      lossDone: false,
+      _lossUnlisten: null,
+    });
+
+    const TOOL_LABELS: Record<string, string> = {
+      get_market_news: '获取市场新闻',
+      get_economic_data: '宏观经济数据',
+      get_global_indexes: '全球指数',
+      get_financial_calendar: '财经日历',
+      search_stocks_by_condition: 'NLP智能选股',
+      search_concept_boards: 'NLP板块搜索',
+      batch_get_stock_quotes: '批量查看行情',
+      get_stock_quote: '查看个股行情',
+      get_fund_flow: '查看资金流向',
+      get_kline_data: '获取K线数据',
+      get_technical_indicators: '获取技术指标',
+      search_stock_news: '个股新闻搜索',
+      get_stock_notices: '公司公告',
+      get_industry_report: '研报摘要',
+    };
+
+    const eventName = `ai-loss-analysis-${date}`;
+    const unlisten = await safeListen<AIStreamEvent>(eventName, (event) => {
+      const data = event.payload;
+      const state = get();
+
+      // 忽略非当前日期的事件
+      if (state.lossAnalysisDate !== date) return;
+
+      if (data.event_type === 'thinking') {
+        set({
+          lossThinkingSteps: [
+            ...state.lossThinkingSteps,
+            { content: data.content || '', timestamp: Date.now() },
+          ],
+        });
+      } else if (data.event_type === 'content') {
+        set({ lossAnalysisContent: state.lossAnalysisContent + (data.content || '') });
+      } else if (data.event_type === 'tool_call') {
+        const toolName = data.tool_name || '';
+        const existing = state.lossToolCalls.filter((t) => t.name !== toolName);
+        set({
+          lossToolCalls: [
+            ...existing,
+            { name: toolName, label: TOOL_LABELS[toolName] || toolName, done: false },
+          ],
+        });
+      } else if (data.event_type === 'tool_result') {
+        const toolName = data.tool_name || '';
+        const summary = data.content || '';
+        set({
+          lossToolCalls: state.lossToolCalls.map((t) =>
+            t.name === toolName ? { ...t, done: true, summary } : t,
+          ),
+        });
+      } else if (data.event_type === 'done') {
+        const fullContent = data.content || state.lossAnalysisContent;
+        set({
+          lossAnalyzing: false,
+          lossAnalysisContent: fullContent,
+          lossDone: true,
+        });
+        unlisten();
+        set({ _lossUnlisten: null });
+      } else if (data.event_type === 'error') {
+        set({
+          lossAnalyzing: false,
+          lossError: data.content || '败因分析失败',
+          lossDone: true,
+        });
+        unlisten();
+        set({ _lossUnlisten: null });
+      }
+    });
+
+    set({ _lossUnlisten: unlisten });
+
+    await invoke('analyze_loss_reasons', {
+      date,
+      lossStocks: lossStocks,
+    }).catch((e: Error) => {
+      set({ lossAnalyzing: false, lossError: e.message, lossDone: true });
+      unlisten();
+      set({ _lossUnlisten: null });
+    });
+  },
+
+  closeLossAnalysis: () => {
+    const { _lossUnlisten } = get();
+    if (_lossUnlisten) {
+      _lossUnlisten();
+    }
+    set({
+      lossAnalyzing: false,
+      lossAnalysisContent: '',
+      lossAnalysisDate: null,
+      lossToolCalls: [],
+      lossThinkingSteps: [],
+      lossError: null,
+      lossDone: false,
+      _lossUnlisten: null,
+    });
   },
 
   getDateGroups: () => {

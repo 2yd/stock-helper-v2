@@ -247,6 +247,17 @@ export interface AIPickTracking {
   created_at: string;
 }
 
+/** 败因分析入参 — 单只亏损股信息 */
+export interface LossStock {
+  code: string;
+  name: string;
+  added_price: number;
+  current_price: number;
+  change_pct: number;
+  reason: string;
+  sector: string;
+}
+
 // ====== News / Info Types ======
 
 export type NewsCategory =

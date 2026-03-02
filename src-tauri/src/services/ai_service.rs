@@ -1190,6 +1190,343 @@ impl AIService {
         let clean_content = clean_dsml_artifacts(&full_content);
         Ok((clean_content, total_usage))
     }
+
+    /// 败因分析 Agent：对某日亏损股进行归因分析
+    pub async fn analyze_loss_reasons_with_tools(
+        config: &AIConfig,
+        date: &str,
+        loss_stocks: &[crate::models::tracking::LossStock],
+        qgqp_b_id: &str,
+        sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
+    ) -> Result<(String, Option<TokenUsage>)> {
+        let client = build_ai_client(config.timeout_secs)?;
+        let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+        let tools = stock_tools::get_pick_tool_definitions();
+
+        let today = chrono::Local::now().format("%Y年%m月%d日 %H:%M").to_string();
+
+        // 构建亏损股明细表
+        let stock_count = loss_stocks.len();
+        let stock_table = loss_stocks.iter().enumerate().map(|(i, s)| {
+            format!(
+                "{}. **{}**（{}）\n   - 加入价: {:.2} → 现价: {:.2}，跌幅: {:.2}%\n   - 所属板块: {}\n   - 原始推荐理由: 「{}」",
+                i + 1, s.name, s.code, s.added_price, s.current_price, s.change_pct, s.sector, s.reason
+            )
+        }).collect::<Vec<_>>().join("\n");
+
+        // 智能资源调度策略
+        let resource_strategy = if stock_count > 5 {
+            format!(
+                "\n# 智能资源调度（本次亏损股有 {} 只，超过5只）\n\
+                 由于亏损股数量较多，请采用以下策略节省资源：\n\
+                 1. **先分析宏观因素**：优先调用大盘指数（如上证指数 sh000001）的K线和技术指标，分析{}期间大盘走势\n\
+                 2. **按行业归类**：如果多只亏损股属于同一板块，合并分析板块因素\n\
+                 3. **聚焦重点个股**：仅对跌幅最大的3-5只进行个股深度分析（新闻/公告/资金流向），其余归入共性原因\n\
+                 4. 避免逐个分析每只股票的全部数据\n",
+                stock_count, date
+            )
+        } else {
+            String::new()
+        };
+
+        let system_prompt = format!(
+            "# 角色\n\
+            你是一位拥有20年实战经验的独立投研分析师（A股方向），擅长复盘和归因分析。\n\
+            \n\
+            当前时间：{today}\n\
+            \n\
+            # 任务\n\
+            对 {date} 日 AI 推荐的 {stock_count} 只亏损股票进行败因分析。重点是**\"预期 vs 现实\"对比**——将每只股票的原始推荐理由与实际走势进行对照，找出\"当初的判断错在哪里\"。\n\
+            \n\
+            # 亏损股明细\n\
+            {stock_table}\n\
+            {resource_strategy}\
+            # 可用工具\n\
+            \n\
+            **宏观/大盘类**：\n\
+            - get_market_news：最新财经新闻\n\
+            - get_kline_data：K线数据（指数或个股）\n\
+            - get_technical_indicators：技术指标\n\
+            \n\
+            **个股深度类**：\n\
+            - get_stock_quote：个股行情\n\
+            - get_fund_flow：资金流向\n\
+            - search_stock_news：个股新闻\n\
+            - get_stock_notices：公司公告\n\
+            - get_industry_report：研报\n\
+            - search_concept_boards：概念板块搜索\n\
+            \n\
+            # 分析要求\n\
+            1. **每轮工具调用 ≤3 个**，每轮调用前说明意图\n\
+            2. 对每只亏损股进行**\"预期 vs 现实\"**对比：\n\
+               - 原始推荐理由认为会怎样？\n\
+               - 实际走势发生了什么？\n\
+               - 判断偏差在哪里？\n\
+            3. 将败因归类为具体类型（如：追高买入、板块轮动、利空消息、技术面走弱、资金出逃、大盘系统性风险等）\n\
+            \n\
+            # 输出格式（Markdown）\n\
+            \n\
+            ## 一、大盘环境分析\n\
+            （{date}前后大盘走势、市场情绪概述）\n\
+            \n\
+            ## 二、逐股败因分析\n\
+            ### 股票名称（代码）— 跌幅 X%\n\
+            - **原始推荐理由**：...\n\
+            - **实际走势**：...\n\
+            - **预期 vs 现实偏差**：...\n\
+            - **败因归类**：【具体类型】\n\
+            \n\
+            ## 三、共性问题总结\n\
+            （归纳这批亏损股的共同原因模式）\n\
+            \n\
+            ## 四、可执行策略建议\n\
+            对每只亏损股给出明确的操作建议：\n\
+            - **止损**：如果基本面恶化或逻辑彻底破坏\n\
+            - **观望**：如果短期波动但逻辑未变\n\
+            - **补仓**：如果超跌且基本面依然良好\n\
+            \n\
+            ## 五、经验教训\n\
+            （对未来选股的改进建议）\n\
+            \n\
+            **重要**：只能通过提供的工具获取数据，禁止编造。",
+            today = today, date = date, stock_count = stock_count,
+            stock_table = stock_table, resource_strategy = resource_strategy,
+        );
+
+        let mut messages: Vec<ChatMessage> = vec![
+            ChatMessage::system(&system_prompt),
+            ChatMessage::user(&format!(
+                "请开始分析 {} 日这 {} 只亏损股票的败因，自主获取数据并给出归因报告和操作建议。",
+                date, stock_count
+            )),
+        ];
+
+        let mut full_content = String::new();
+        let mut total_usage: Option<TokenUsage> = None;
+        let mut budget_exceeded = false;
+
+        // Phase 1: Tool calling loop
+        for _round in 0..MAX_PICK_TOOL_ROUNDS {
+            if budget_exceeded {
+                break;
+            }
+            if let Some(ref u) = total_usage {
+                if u.total_tokens > MAX_PICK_TOKEN_BUDGET {
+                    log::warn!("败因分析 token 预算已超限 ({}/{}), 强制进入最终输出阶段",
+                        u.total_tokens, MAX_PICK_TOKEN_BUDGET);
+                    messages.push(ChatMessage::user(
+                        "token预算已接近上限，请在本轮直接给出最终败因分析报告，不要再调用工具。"
+                    ));
+                    budget_exceeded = true;
+                }
+            }
+
+            let req = ChatCompletionRequest {
+                model: config.model_name.clone(),
+                messages: messages.clone(),
+                max_tokens: Some(config.max_tokens),
+                temperature: Some(config.pick_temperature),
+                stream: Some(false),
+                tools: Some(tools.clone()),
+                tool_choice: None,
+            };
+
+            let req_json = serde_json::to_value(&req)
+                .map_err(|e| anyhow!("Failed to serialize request: {}", e))?;
+            let body = {
+                let client_ref = &client;
+                let url_ref = &url;
+                let api_key = &config.api_key;
+                let req_json_ref = &req_json;
+                retry_with_backoff(2, || async {
+                    let resp = client_ref
+                        .post(url_ref.as_str())
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Content-Type", "application/json")
+                        .json(req_json_ref)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("AI API request failed: {}", e))?;
+
+                    if !resp.status().is_success() {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        return Err(anyhow!("AI API error ({}): {}", status.as_u16(), body));
+                    }
+
+                    resp.text().await.map_err(|e| anyhow!("Read response body failed: {}", e))
+                }).await?
+            };
+
+            let response: ChatCompletionResponse = serde_json::from_str(&body)
+                .map_err(|e| anyhow!("AI response parse error: {} body: {}", e, &body[..500.min(body.len())]))?;
+
+            if let Some(usage) = &response.usage {
+                total_usage = Some(match total_usage {
+                    Some(mut u) => {
+                        u.prompt_tokens += usage.prompt_tokens;
+                        u.completion_tokens += usage.completion_tokens;
+                        u.total_tokens += usage.total_tokens;
+                        u
+                    }
+                    None => usage.clone(),
+                });
+            }
+
+            let choice = response.choices.first()
+                .ok_or_else(|| anyhow!("AI 返回空 choices"))?;
+
+            let finish_reason = choice.finish_reason.as_deref().unwrap_or("");
+            let msg = choice.message.as_ref().ok_or_else(|| anyhow!("AI 返回空 message"))?;
+
+            if (finish_reason == "tool_calls" || msg.tool_calls.is_some())
+                && msg.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty())
+            {
+                let tool_calls = msg.tool_calls.as_ref().unwrap();
+
+                let thinking_content = msg.content.as_ref().filter(|c| !c.is_empty()).cloned();
+                if let Some(ref thinking) = thinking_content {
+                    let _ = sender.send(AIStreamEvent {
+                        event_type: "thinking".to_string(),
+                        content: Some(thinking.clone()),
+                        done: false,
+                        usage: None,
+                        tool_name: None,
+                    }).await;
+                }
+
+                messages.push(ChatMessage::assistant_tool_calls_with_content(
+                    thinking_content,
+                    tool_calls.clone(),
+                ));
+
+                for tc in tool_calls {
+                    let tool_name = &tc.function.name;
+                    let tool_args = &tc.function.arguments;
+
+                    let _ = sender.send(AIStreamEvent {
+                        event_type: "tool_call".to_string(),
+                        content: Some(format!("正在获取: {}", stock_tools::pick_tool_name_to_chinese(tool_name))),
+                        done: false,
+                        usage: None,
+                        tool_name: Some(tool_name.clone()),
+                    }).await;
+
+                    let result = match stock_tools::execute_pick_tool(tool_name, tool_args, qgqp_b_id).await {
+                        Ok(r) => r,
+                        Err(e) => format!("工具调用失败: {}", e),
+                    };
+
+                    let summary = stock_tools::summarize_tool_result(tool_name, &result);
+
+                    let _ = sender.send(AIStreamEvent {
+                        event_type: "tool_result".to_string(),
+                        content: Some(summary),
+                        done: false,
+                        usage: None,
+                        tool_name: Some(tool_name.clone()),
+                    }).await;
+
+                    messages.push(ChatMessage::tool_result(&tc.id, tool_name, &result));
+                }
+                continue;
+            }
+
+            if let Some(content) = &msg.content {
+                if !content.is_empty() {
+                    messages.push(ChatMessage::assistant_text(content));
+                }
+            }
+            break;
+        }
+
+        // Phase 2: Stream the final analysis
+        let last_is_assistant = messages.last().map_or(false, |m| m.role == "assistant" && m.content.is_some());
+        if last_is_assistant {
+            messages.pop();
+        }
+
+        let loss_max_tokens = config.max_tokens.max(4096);
+
+        let req = ChatCompletionRequest {
+            model: config.model_name.clone(),
+            messages: messages.clone(),
+            max_tokens: Some(loss_max_tokens),
+            temperature: Some(config.pick_temperature),
+            stream: Some(true),
+            tools: None,
+            tool_choice: None,
+        };
+
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&req)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await?;
+            return Err(anyhow!("AI API error: {}", body));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buffer = String::new();
+        let mut dsml_detected = false;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(line_end) = buffer.find('\n') {
+                let line = buffer[..line_end].trim().to_string();
+                buffer = buffer[line_end + 1..].to_string();
+
+                if line.is_empty() || line == "data: [DONE]" {
+                    continue;
+                }
+
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if let Ok(chunk_resp) = serde_json::from_str::<ChatCompletionResponse>(data) {
+                        if let Some(choice) = chunk_resp.choices.first() {
+                            if let Some(delta) = &choice.delta {
+                                if let Some(content) = &delta.content {
+                                    if content.contains("<\u{ff5c}") || content.contains("DSML") || content.contains("<｜") {
+                                        dsml_detected = true;
+                                    }
+                                    full_content.push_str(content);
+                                    if !dsml_detected {
+                                        let _ = sender.send(AIStreamEvent {
+                                            event_type: "content".to_string(),
+                                            content: Some(content.clone()),
+                                            done: false,
+                                            usage: None,
+                                            tool_name: None,
+                                        }).await;
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(usage) = &chunk_resp.usage {
+                            total_usage = Some(match total_usage {
+                                Some(mut u) => {
+                                    u.prompt_tokens += usage.prompt_tokens;
+                                    u.completion_tokens += usage.completion_tokens;
+                                    u.total_tokens += usage.total_tokens;
+                                    u
+                                }
+                                None => usage.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        let clean_content = clean_dsml_artifacts(&full_content);
+        Ok((clean_content, total_usage))
+    }
 }
 
 fn extract_json_array(text: &str) -> Result<String> {

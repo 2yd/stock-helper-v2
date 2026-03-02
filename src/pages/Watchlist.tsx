@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Plus, Loader2, Activity, X, RefreshCw, Eye, ArrowLeft, Brain, TrendingUp, TrendingDown, Trash2, Calendar, Target, ChevronDown, ChevronUp, LayoutList, Table2 } from 'lucide-react';
+import { Search, Plus, Loader2, Activity, X, RefreshCw, Eye, ArrowLeft, Brain, TrendingUp, TrendingDown, Trash2, Calendar, Target, ChevronDown, ChevronUp, LayoutList, Table2, AlertTriangle } from 'lucide-react';
 import { useWatchlistStore } from '../stores/watchlistStore';
 import { useTrackingStore, DateGroup, TrackingStockWithQuote } from '../stores/trackingStore';
 import { safeInvoke } from '../hooks/useTauri';
-import { WatchlistQuote, StockLabel } from '../types';
+import { WatchlistQuote, StockLabel, LossStock } from '../types';
 import StockTable, { UnifiedStockRow, watchlistQuoteToUnified } from '../components/StockTable';
 import KlineChart from '../components/KlineChart';
 import TechnicalPanel from '../components/TechnicalPanel';
 import WatchlistDiagnosePanel from '../components/WatchlistDiagnosePanel';
+import LossAnalysisPanel from '../components/LossAnalysisPanel';
 
 interface SearchResult {
   code: string;
@@ -41,6 +42,7 @@ export default function Watchlist() {
     startAutoRefresh: startTrackingRefresh,
     stopAutoRefresh: stopTrackingRefresh,
     getDateGroups,
+    lossAnalysisDate, startLossAnalysis,
   } = useTrackingStore();
 
   const [mainTab, setMainTab] = useState<MainTab>('tracking');
@@ -467,6 +469,9 @@ export default function Watchlist() {
                     selectStock(code);
                     setActiveTab('detail');
                   }}
+                  onLossAnalysis={(date, lossStocks) => {
+                    startLossAnalysis(date, lossStocks);
+                  }}
                 />
               ))}
             </div>
@@ -552,6 +557,11 @@ export default function Watchlist() {
           onClose={() => setShowDiagnosePanel(false)}
         />
       )}
+
+      {/* Loss Analysis Panel */}
+      {lossAnalysisDate && (
+        <LossAnalysisPanel />
+      )}
     </div>
   );
 }
@@ -563,13 +573,29 @@ function TrackingDateGroup({
   onRemove,
   onClearDate,
   onStockClick,
+  onLossAnalysis,
 }: {
   group: DateGroup;
   onRemove: (code: string, addedDate: string) => void;
   onClearDate: (date: string) => void;
   onStockClick: (code: string) => void;
+  onLossAnalysis: (date: string, lossStocks: LossStock[]) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+
+  const lossStocks = useMemo(() => {
+    return group.stocks
+      .filter((s) => s.change_from_added !== undefined && s.change_from_added < 0)
+      .map((s): LossStock => ({
+        code: s.code,
+        name: s.name,
+        added_price: s.added_price,
+        current_price: s.current_price || 0,
+        change_pct: s.change_from_added || 0,
+        reason: s.reason,
+        sector: s.sector,
+      }));
+  }, [group.stocks]);
 
   const winRateColor = group.winRate >= 60
     ? 'text-functional-up'
@@ -619,6 +645,18 @@ function TrackingDateGroup({
             <span className="text-txt-muted">/</span>
             <span className="text-functional-down">{group.loseCount}跌</span>
           </div>
+
+          {/* Loss Analysis Button */}
+          {lossStocks.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onLossAnalysis(group.date, lossStocks); }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all cursor-pointer"
+              title={`分析 ${lossStocks.length} 只亏损股的败因`}
+            >
+              <AlertTriangle size={10} />
+              败因分析
+            </button>
+          )}
 
           <button
             onClick={(e) => { e.stopPropagation(); onClearDate(group.date); }}

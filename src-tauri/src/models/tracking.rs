@@ -13,3 +13,15 @@ pub struct AIPickTracking {
     pub sector: String,
     pub created_at: String,
 }
+
+/// 败因分析入参 — 单只亏损股的信息（前端已计算好涨跌幅）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LossStock {
+    pub code: String,
+    pub name: String,
+    pub added_price: f64,
+    pub current_price: f64,
+    pub change_pct: f64,
+    pub reason: String,
+    pub sector: String,
+}

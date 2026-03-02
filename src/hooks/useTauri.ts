@@ -131,6 +131,8 @@ function getMockData(cmd: string): unknown {
       return null;
     case 'stop_ai_pick':
       return null;
+    case 'analyze_loss_reasons':
+      return null;
     case 'test_ai_config':
       return '模型连接正常（Mock 环境）';
     default:
