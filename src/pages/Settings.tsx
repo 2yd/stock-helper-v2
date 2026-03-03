@@ -1,17 +1,27 @@
 import { useEffect, useState } from 'react';
-import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
-import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown } from 'lucide-react';
+import { Slider, Switch, Select, Input, InputNumber, App, Modal } from 'antd';
+import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown, RefreshCw, Info } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-shell';
+import { getVersion } from '@tauri-apps/api/app';
+import { safeInvoke as invoke, isTauri } from '../hooks/useTauri';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AIConfig } from '../types';
+import logger from '../utils/logger';
 
 export default function Settings() {
   const { message } = App.useApp();
   const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId, exportLogs, exportingLogs } = useSettingsStore();
 
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [appVersion, setAppVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    // 获取当前版本号
+    if (isTauri) {
+      getVersion().then(v => setAppVersion(v)).catch(() => setAppVersion('unknown'));
+    }
   }, []);
 
   if (!settings) {
@@ -548,6 +558,81 @@ export default function Settings() {
             )}
             {exportingLogs ? '导出中...' : '导出日志'}
           </button>
+        </div>
+      </section>
+
+      {/* 关于 / 版本更新 */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <Info size={18} className="text-purple-400" />
+          <h2 className="text-base font-bold text-txt-primary">关于</h2>
+        </div>
+
+        <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-txt-primary">当前版本</span>
+              <span className="text-sm text-txt-muted ml-2 font-mono">v{appVersion || '...'}</span>
+            </div>
+            <button
+              onClick={async () => {
+                setCheckingUpdate(true);
+                try {
+                  const result = await invoke<{ version: string; current_version: string; body: string; published_at: string; html_url: string } | null>('check_update');
+                  if (result) {
+                    const publishDate = result.published_at
+                      ? new Date(result.published_at).toLocaleDateString('zh-CN')
+                      : '';
+                    Modal.confirm({
+                      title: `发现新版本 v${result.version}`,
+                      width: 520,
+                      icon: null,
+                      content: (
+                        <div className="mt-2 space-y-3">
+                          <div className="flex items-center gap-4 text-sm text-txt-muted">
+                            <span>当前版本: v{result.current_version}</span>
+                            {publishDate && <span>发布日期: {publishDate}</span>}
+                          </div>
+                          {result.body && (
+                            <div className="max-h-60 overflow-y-auto p-3 rounded-lg bg-bg-elevated border border-[#30363D]">
+                              <p className="text-xs text-txt-muted mb-1 font-medium">更新内容:</p>
+                              <pre className="text-sm text-txt-secondary whitespace-pre-wrap font-sans leading-relaxed">{result.body}</pre>
+                            </div>
+                          )}
+                          <p className="text-xs text-txt-muted">下载后直接安装即可，数据不会丢失。</p>
+                        </div>
+                      ),
+                      okText: '前往下载',
+                      cancelText: '稍后再说',
+                      onOk: () => {
+                        if (result.html_url) {
+                          open(result.html_url).catch((e: unknown) =>
+                            logger.error(`Failed to open release URL: ${e}`)
+                          );
+                        }
+                      },
+                    });
+                  } else {
+                    message.success('已是最新版本');
+                  }
+                } catch (e: unknown) {
+                  const errMsg = e instanceof Error ? e.message : String(e);
+                  message.error(`检查更新失败: ${errMsg}`);
+                } finally {
+                  setCheckingUpdate(false);
+                }
+              }}
+              disabled={checkingUpdate}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {checkingUpdate ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              {checkingUpdate ? '检查中...' : '检查更新'}
+            </button>
+          </div>
         </div>
       </section>
     </div>

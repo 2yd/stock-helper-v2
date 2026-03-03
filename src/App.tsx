@@ -1,15 +1,76 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Modal } from 'antd';
+import { open } from '@tauri-apps/plugin-shell';
 import AIPick from './pages/AIPick';
 import Settings from './pages/Settings';
 import SmartStock from './pages/SmartStock';
 import Watchlist from './pages/Watchlist';
 import NewsCenter from './pages/NewsCenter';
+import { safeInvoke as invoke } from './hooks/useTauri';
+import logger from './utils/logger';
 import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Search, Brain, Eye, Newspaper } from 'lucide-react';
+
+interface UpdateInfo {
+  version: string;
+  current_version: string;
+  body: string;
+  published_at: string;
+  html_url: string;
+}
 
 type Page = 'board' | 'settings' | 'smart' | 'watchlist' | 'news';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('smart');
+
+  // 启动时静默检查更新
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const result = await invoke<UpdateInfo | null>('check_update');
+        if (result) {
+          const publishDate = result.published_at
+            ? new Date(result.published_at).toLocaleDateString('zh-CN')
+            : '';
+
+          Modal.confirm({
+            title: `发现新版本 v${result.version}`,
+            width: 520,
+            icon: null,
+            content: (
+              <div className="mt-2 space-y-3">
+                <div className="flex items-center gap-4 text-sm text-txt-muted">
+                  <span>当前版本: v{result.current_version}</span>
+                  {publishDate && <span>发布日期: {publishDate}</span>}
+                </div>
+                {result.body && (
+                  <div className="max-h-60 overflow-y-auto p-3 rounded-lg bg-bg-elevated border border-[#30363D]">
+                    <p className="text-xs text-txt-muted mb-1 font-medium">更新内容:</p>
+                    <pre className="text-sm text-txt-secondary whitespace-pre-wrap font-sans leading-relaxed">{result.body}</pre>
+                  </div>
+                )}
+                <p className="text-xs text-txt-muted">下载后直接安装即可，数据不会丢失。</p>
+              </div>
+            ),
+            okText: '前往下载',
+            cancelText: '稍后再说',
+            onOk: () => {
+              if (result.html_url) {
+                open(result.html_url).catch((e: unknown) =>
+                  logger.error(`Failed to open release URL: ${e}`)
+                );
+              }
+            },
+          });
+        }
+      } catch (e) {
+        // 静默失败，不打扰用户
+        logger.info(`Auto update check failed (non-critical): ${e}`);
+      }
+    }, 3000); // 延迟 3 秒检查，避免启动时阻塞
+
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="w-full h-full flex flex-col bg-bg-base">

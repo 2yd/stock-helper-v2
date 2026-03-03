@@ -111,6 +111,105 @@ pub async fn test_ai_config(
     })
 }
 
+/// 检查版本更新：通过 GitHub Releases API 获取最新版本，与当前版本对比
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    log::info!("[settings_cmd] check_update");
+
+    // 从 tauri.conf.json 读取当前版本
+    let current_version = app.config().version.clone().unwrap_or_default();
+    log::info!("[settings_cmd] current_version={}", current_version);
+
+    // 调用 GitHub API 获取最新 release
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let resp = client
+        .get("https://api.github.com/repos/2yd/stock-helper-v2/releases/latest")
+        .header("User-Agent", "StockHelper")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("请求 GitHub API 失败: {}", e))?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        log::info!("[settings_cmd] check_update: no releases found");
+        return Ok(None);
+    }
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        return Err(format!("GitHub API 返回错误: {}", status));
+    }
+
+    let release: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 GitHub API 响应失败: {}", e))?;
+
+    let tag_name = release["tag_name"]
+        .as_str()
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+
+    if tag_name.is_empty() {
+        return Ok(None);
+    }
+
+    // 比较版本号
+    let is_newer = compare_versions(&tag_name, &current_version);
+    if !is_newer {
+        log::info!(
+            "[settings_cmd] check_update: current={} latest={}, no update",
+            current_version,
+            tag_name
+        );
+        return Ok(None);
+    }
+
+    log::info!(
+        "[settings_cmd] check_update: new version available {} -> {}",
+        current_version,
+        tag_name
+    );
+
+    // 构建更新信息
+    let update_info = serde_json::json!({
+        "version": tag_name,
+        "current_version": current_version,
+        "body": release["body"].as_str().unwrap_or(""),
+        "published_at": release["published_at"].as_str().unwrap_or(""),
+        "html_url": release["html_url"].as_str().unwrap_or(""),
+    });
+
+    Ok(Some(update_info))
+}
+
+/// 简单的语义化版本对比：latest > current 返回 true
+fn compare_versions(latest: &str, current: &str) -> bool {
+    let parse = |v: &str| -> Vec<u64> {
+        v.split('.')
+            .filter_map(|s| s.parse::<u64>().ok())
+            .collect()
+    };
+    let l = parse(latest);
+    let c = parse(current);
+    for i in 0..l.len().max(c.len()) {
+        let lv = l.get(i).copied().unwrap_or(0);
+        let cv = c.get(i).copied().unwrap_or(0);
+        if lv > cv {
+            return true;
+        }
+        if lv < cv {
+            return false;
+        }
+    }
+    false
+}
+
 /// 导出日志：将 app_log_dir 下所有日志文件打包为 zip，通过系统对话框让用户选择保存位置
 #[tauri::command]
 pub async fn export_logs(app: AppHandle) -> Result<String, String> {
