@@ -267,9 +267,35 @@ impl AIService {
                 && msg.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty())
             {
                 let tool_calls = msg.tool_calls.as_ref().unwrap();
+
+                // 透传 reasoning_content（DeepSeek R1 等推理模型的思考链）
+                if let Some(ref reasoning) = msg.reasoning_content {
+                    if !reasoning.is_empty() {
+                        let _ = sender.send(AIStreamEvent {
+                            event_type: "thinking".to_string(),
+                            content: Some(reasoning.clone()),
+                            done: false,
+                            usage: None,
+                            tool_name: None,
+                        }).await;
+                    }
+                }
+
+                // 透传 AI 思考内容（content 字段，部分模型在 tool_calls 同时返回文本）
+                let thinking_content = msg.content.as_ref().filter(|c| !c.is_empty()).cloned();
+                if let Some(ref thinking) = thinking_content {
+                    let _ = sender.send(AIStreamEvent {
+                        event_type: "thinking".to_string(),
+                        content: Some(thinking.clone()),
+                        done: false,
+                        usage: None,
+                        tool_name: None,
+                    }).await;
+                }
+
                 // Add assistant message with tool_calls to history (preserve reasoning_content for DeepSeek R1)
                 messages.push(ChatMessage::assistant_from_response(
-                    msg.content.clone(),
+                    thinking_content,
                     msg.reasoning_content.clone(),
                     Some(tool_calls.clone()),
                 ));
@@ -757,7 +783,20 @@ impl AIService {
             {
                 let tool_calls = msg.tool_calls.as_ref().unwrap();
 
-                // 透传 AI 思考内容（如果模型在 tool_calls 同时返回了 content）
+                // 透传 reasoning_content（DeepSeek R1 等推理模型的思考链）
+                if let Some(ref reasoning) = msg.reasoning_content {
+                    if !reasoning.is_empty() {
+                        let _ = sender.send(AIStreamEvent {
+                            event_type: "thinking".to_string(),
+                            content: Some(reasoning.clone()),
+                            done: false,
+                            usage: None,
+                            tool_name: None,
+                        }).await;
+                    }
+                }
+
+                // 透传 AI 思考内容（content 字段）
                 let thinking_content = msg.content.as_ref().filter(|c| !c.is_empty()).cloned();
                 if let Some(ref thinking) = thinking_content {
                     let _ = sender.send(AIStreamEvent {
@@ -769,7 +808,6 @@ impl AIService {
                     }).await;
                 }
 
-                // 使用 assistant_from_response 保留 reasoning_content（DeepSeek R1 兼容）
                 messages.push(ChatMessage::assistant_from_response(
                     thinking_content,
                     msg.reasoning_content.clone(),
@@ -1103,7 +1141,20 @@ impl AIService {
             {
                 let tool_calls = msg.tool_calls.as_ref().unwrap();
 
-                // 透传 AI 思考内容
+                // 透传 reasoning_content（DeepSeek R1 等推理模型的思考链）
+                if let Some(ref reasoning) = msg.reasoning_content {
+                    if !reasoning.is_empty() {
+                        let _ = sender.send(AIStreamEvent {
+                            event_type: "thinking".to_string(),
+                            content: Some(reasoning.clone()),
+                            done: false,
+                            usage: None,
+                            tool_name: None,
+                        }).await;
+                    }
+                }
+
+                // 透传 AI 思考内容（content 字段）
                 let thinking_content = msg.content.as_ref().filter(|c| !c.is_empty()).cloned();
                 if let Some(ref thinking) = thinking_content {
                     let _ = sender.send(AIStreamEvent {
@@ -1449,6 +1500,19 @@ impl AIService {
                 && msg.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty())
             {
                 let tool_calls = msg.tool_calls.as_ref().unwrap();
+
+                // 透传 reasoning_content（DeepSeek R1 等推理模型的思考链）
+                if let Some(ref reasoning) = msg.reasoning_content {
+                    if !reasoning.is_empty() {
+                        let _ = sender.send(AIStreamEvent {
+                            event_type: "thinking".to_string(),
+                            content: Some(reasoning.clone()),
+                            done: false,
+                            usage: None,
+                            tool_name: None,
+                        }).await;
+                    }
+                }
 
                 let thinking_content = msg.content.as_ref().filter(|c| !c.is_empty()).cloned();
                 if let Some(ref thinking) = thinking_content {
