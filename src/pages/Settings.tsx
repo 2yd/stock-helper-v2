@@ -290,6 +290,42 @@ export default function Settings() {
               onChange={v => saveSettings({ ...settings, ai_instruction_enabled: v })}
             />
           </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-txt-primary">Agent 最大工具轮次</span>
+              <span className="text-xs text-txt-muted ml-2">
+                {settings.max_pick_tool_rounds ?? 10} 轮
+              </span>
+            </div>
+            <div className="w-48">
+              <Slider
+                min={3}
+                max={20}
+                step={1}
+                value={settings.max_pick_tool_rounds ?? 10}
+                onChange={v => saveSettings({ ...settings, max_pick_tool_rounds: v })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-txt-primary">Agent Token 预算</span>
+              <span className="text-xs text-txt-muted ml-2">
+                {((settings.max_pick_token_budget ?? 100000) / 1000).toFixed(0)}K
+              </span>
+            </div>
+            <div className="w-48">
+              <Slider
+                min={20000}
+                max={500000}
+                step={10000}
+                value={settings.max_pick_token_budget ?? 100000}
+                onChange={v => saveSettings({ ...settings, max_pick_token_budget: v })}
+              />
+            </div>
+          </div>
         </div>
       </section>
 

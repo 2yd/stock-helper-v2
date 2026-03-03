@@ -106,6 +106,8 @@ export interface AppSettings {
   active_strategy_id: string;
   token_usage_today: number;
   qgqp_b_id: string;
+  max_pick_tool_rounds: number;
+  max_pick_token_budget: number;
 }
 
 export interface AIAnalysisResult {
@@ -315,6 +317,8 @@ export interface AIPickRecommendation {
   rating: 'strong_buy' | 'buy' | 'watch';
   sector?: string;
   highlights?: string[];
+  fund_flow?: string;    // 资金流向状态，如"主力净流入2.3亿"
+  valuation?: string;    // 估值水平，如"PE 15.2 低估"
 }
 
 export interface AIPickResult {

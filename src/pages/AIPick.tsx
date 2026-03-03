@@ -621,6 +621,16 @@ function RecommendationCard({
               {rec.sector}
             </span>
           )}
+          {rec.fund_flow && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${rec.fund_flow.includes('流入') ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+              {rec.fund_flow}
+            </span>
+          )}
+          {rec.valuation && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              {rec.valuation}
+            </span>
+          )}
           {rec.highlights?.map((h, hi) => (
             <span key={hi} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/5 text-cyan-400/70 border border-cyan-500/10">
               {h}
@@ -779,6 +789,16 @@ function SimilarStocksPanel({
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ratingCfg.color} ${ratingCfg.bg} border ${ratingCfg.border}`}>
                           {ratingCfg.label}
                         </span>
+                        {rec.fund_flow && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${rec.fund_flow.includes('流入') ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+                            {rec.fund_flow}
+                          </span>
+                        )}
+                        {rec.valuation && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {rec.valuation}
+                          </span>
+                        )}
                         {rec.highlights?.map((h, hi) => (
                           <span key={hi} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/5 text-indigo-400/70 border border-indigo-500/10">
                             {h}

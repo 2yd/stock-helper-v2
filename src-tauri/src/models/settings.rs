@@ -24,10 +24,16 @@ pub struct AppSettings {
     pub token_usage_today: u32,
     #[serde(default)]
     pub qgqp_b_id: String,
+    #[serde(default = "default_max_pick_tool_rounds")]
+    pub max_pick_tool_rounds: usize,
+    #[serde(default = "default_max_pick_token_budget")]
+    pub max_pick_token_budget: u32,
 }
 
 fn default_refresh_interval() -> u64 { 30 }
 fn default_true() -> bool { true }
+fn default_max_pick_tool_rounds() -> usize { 10 }
+fn default_max_pick_token_budget() -> u32 { 100_000 }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -44,6 +50,8 @@ impl Default for AppSettings {
             active_strategy_id: strategy_id,
             token_usage_today: 0,
             qgqp_b_id: String::new(),
+            max_pick_tool_rounds: 10,
+            max_pick_token_budget: 100_000,
         }
     }
 }
