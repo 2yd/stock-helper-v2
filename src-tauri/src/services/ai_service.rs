@@ -267,8 +267,12 @@ impl AIService {
                 && msg.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty())
             {
                 let tool_calls = msg.tool_calls.as_ref().unwrap();
-                // Add assistant message with tool_calls to history
-                messages.push(ChatMessage::assistant_tool_calls(tool_calls.clone()));
+                // Add assistant message with tool_calls to history (preserve reasoning_content for DeepSeek R1)
+                messages.push(ChatMessage::assistant_from_response(
+                    msg.content.clone(),
+                    msg.reasoning_content.clone(),
+                    Some(tool_calls.clone()),
+                ));
 
                 // Execute each tool call
                 for tc in tool_calls {
@@ -313,7 +317,11 @@ impl AIService {
                 if !content.is_empty() {
                     // Model already gave an answer in non-streaming mode; just add to history
                     // We'll re-request in streaming mode below for good UX
-                    messages.push(ChatMessage::assistant_text(content));
+                    messages.push(ChatMessage::assistant_from_response(
+                        Some(content.clone()),
+                        msg.reasoning_content.clone(),
+                        None,
+                    ));
                 }
             }
             break;
@@ -761,10 +769,11 @@ impl AIService {
                     }).await;
                 }
 
-                // 使用新方法，同时携带 content 和 tool_calls
-                messages.push(ChatMessage::assistant_tool_calls_with_content(
+                // 使用 assistant_from_response 保留 reasoning_content（DeepSeek R1 兼容）
+                messages.push(ChatMessage::assistant_from_response(
                     thinking_content,
-                    tool_calls.clone(),
+                    msg.reasoning_content.clone(),
+                    Some(tool_calls.clone()),
                 ));
 
                 for tc in tool_calls {
@@ -830,7 +839,11 @@ impl AIService {
 
             if let Some(content) = &msg.content {
                 if !content.is_empty() {
-                    messages.push(ChatMessage::assistant_text(content));
+                    messages.push(ChatMessage::assistant_from_response(
+                        Some(content.clone()),
+                        msg.reasoning_content.clone(),
+                        None,
+                    ));
                 }
             }
             break;
@@ -1102,9 +1115,10 @@ impl AIService {
                     }).await;
                 }
 
-                messages.push(ChatMessage::assistant_tool_calls_with_content(
+                messages.push(ChatMessage::assistant_from_response(
                     thinking_content,
-                    tool_calls.clone(),
+                    msg.reasoning_content.clone(),
+                    Some(tool_calls.clone()),
                 ));
 
                 for tc in tool_calls {
@@ -1141,7 +1155,11 @@ impl AIService {
 
             if let Some(content) = &msg.content {
                 if !content.is_empty() {
-                    messages.push(ChatMessage::assistant_text(content));
+                    messages.push(ChatMessage::assistant_from_response(
+                        Some(content.clone()),
+                        msg.reasoning_content.clone(),
+                        None,
+                    ));
                 }
             }
             break;
@@ -1443,9 +1461,10 @@ impl AIService {
                     }).await;
                 }
 
-                messages.push(ChatMessage::assistant_tool_calls_with_content(
+                messages.push(ChatMessage::assistant_from_response(
                     thinking_content,
-                    tool_calls.clone(),
+                    msg.reasoning_content.clone(),
+                    Some(tool_calls.clone()),
                 ));
 
                 for tc in tool_calls {
@@ -1482,7 +1501,11 @@ impl AIService {
 
             if let Some(content) = &msg.content {
                 if !content.is_empty() {
-                    messages.push(ChatMessage::assistant_text(content));
+                    messages.push(ChatMessage::assistant_from_response(
+                        Some(content.clone()),
+                        msg.reasoning_content.clone(),
+                        None,
+                    ));
                 }
             }
             break;

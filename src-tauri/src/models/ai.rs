@@ -74,6 +74,9 @@ pub struct ChatMessage {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// DeepSeek R1 等深度思考模型的思考链内容，回传历史消息时必须保留
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -87,6 +90,7 @@ impl ChatMessage {
         Self {
             role: "system".to_string(),
             content: Some(content.to_string()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -97,6 +101,7 @@ impl ChatMessage {
         Self {
             role: "user".to_string(),
             content: Some(content.to_string()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -107,6 +112,7 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content: Some(content.to_string()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -117,6 +123,7 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content: None,
+            reasoning_content: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
             name: None,
@@ -129,7 +136,20 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content,
+            reasoning_content: None,
             tool_calls: Some(tool_calls),
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// 从 API 响应构建 assistant 消息，保留 reasoning_content（DeepSeek R1 等模型）
+    pub fn assistant_from_response(content: Option<String>, reasoning_content: Option<String>, tool_calls: Option<Vec<ToolCall>>) -> Self {
+        Self {
+            role: "assistant".to_string(),
+            content,
+            reasoning_content,
+            tool_calls,
             tool_call_id: None,
             name: None,
         }
@@ -139,6 +159,7 @@ impl ChatMessage {
         Self {
             role: "tool".to_string(),
             content: Some(content.to_string()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
             name: Some(name.to_string()),
@@ -198,6 +219,8 @@ pub struct ChatChoice {
 pub struct ChatChoiceMessage {
     pub role: Option<String>,
     pub content: Option<String>,
+    /// DeepSeek R1 等模型的思考链内容
+    pub reasoning_content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 

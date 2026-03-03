@@ -34,6 +34,18 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Sync Cargo.toml version
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          rm -f src-tauri/Cargo.toml.bak
+        shell: bash
+
       - name: Install frontend dependencies
         run: npm ci
 
@@ -53,4 +65,4 @@ jobs:
             - **Windows**: 下载 `.msi` 或 `.exe` 安装包
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config "{\"version\":\"${{ steps.get_version.outputs.VERSION }}\"}"
