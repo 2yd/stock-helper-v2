@@ -39,11 +39,14 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Sync Cargo.toml version
+      - name: Sync versions
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
           sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
           rm -f src-tauri/Cargo.toml.bak
+          # 同步 tauri.conf.json 版本号
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+          rm -f src-tauri/tauri.conf.json.bak
         shell: bash
 
       - name: Install frontend dependencies
@@ -65,4 +68,4 @@ jobs:
             - **Windows**: 下载 `.msi` 或 `.exe` 安装包
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }} --config "{\"version\":\"${{ steps.get_version.outputs.VERSION }}\"}"
+          args: ${{ matrix.args }}
