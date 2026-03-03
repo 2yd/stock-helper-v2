@@ -3,6 +3,7 @@ import { Input, Table, App, Spin } from 'antd';
 import { Search, TrendingUp, Flame } from 'lucide-react';
 import { safeInvoke as invoke } from '../hooks/useTauri';
 import { HotStrategyItem, SmartStockColumn } from '../types';
+import logger from '../utils/logger';
 
 const { Search: AntSearch } = Input;
 
@@ -37,7 +38,7 @@ export default function SmartStock() {
         doSearch(data[0].question);
       }
     } catch (e) {
-      console.error('Failed to load hot strategies:', e);
+      logger.error(`Failed to load hot strategies: ${e}`);
     } finally {
       setHotLoading(false);
     }

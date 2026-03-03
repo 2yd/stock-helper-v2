@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { safeInvoke as invoke } from '../hooks/useTauri';
 import { StrategyResultRow } from '../types';
+import logger from '../utils/logger';
 
 interface StockStore {
   results: StrategyResultRow[];
@@ -38,7 +39,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
       const now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
       set({ results, lastRefreshTime: now, loading: false, scanTotal: results.length });
     } catch (e) {
-      console.error('Failed to scan market:', e);
+      logger.error(`Failed to scan market: ${e}`);
       set({ loading: false });
     }
   },
@@ -58,7 +59,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
       set({ results: updated });
       get().fetchTokenUsage();
     } catch (e) {
-      console.error('Failed to generate AI instructions:', e);
+      logger.error(`Failed to generate AI instructions: ${e}`);
     }
   },
 
@@ -67,7 +68,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
       const status = await invoke<string>('get_market_status');
       set({ marketStatus: status });
     } catch (e) {
-      console.error('Failed to fetch market status:', e);
+      logger.error(`Failed to fetch market status: ${e}`);
     }
   },
 
@@ -76,7 +77,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
       const usage = await invoke<number>('get_today_token_usage');
       set({ tokenUsageToday: usage });
     } catch (e) {
-      console.error('Failed to fetch token usage:', e);
+      logger.error(`Failed to fetch token usage: ${e}`);
     }
   },
 

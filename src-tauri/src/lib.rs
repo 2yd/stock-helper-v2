@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind, RotationStrategy, TimezoneStrategy};
 
 pub struct AppState {
     pub db: Database,
@@ -22,13 +23,24 @@ pub struct AppState {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            let log_level = if cfg!(debug_assertions) {
+                log::LevelFilter::Info
+            } else {
+                log::LevelFilter::Warn
+            };
+
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log_level)
+                    .targets([
+                        Target::new(TargetKind::Stdout),
+                        Target::new(TargetKind::LogDir { file_name: None }),
+                    ])
+                    .rotation_strategy(RotationStrategy::KeepAll)
+                    .max_file_size(5_000_000) // 5MB per file
+                    .timezone_strategy(TimezoneStrategy::UseLocal)
+                    .build(),
+            )?;
 
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to get app data directory");
@@ -52,6 +64,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::stock_cmd::get_realtime_data,
             commands::stock_cmd::get_kline_data,
@@ -105,6 +118,7 @@ pub fn run() {
             commands::tracking_cmd::get_tracking_stocks,
             commands::tracking_cmd::clear_tracking_by_date,
             commands::tracking_cmd::analyze_loss_reasons,
+            commands::settings_cmd::export_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,7 +17,12 @@ pub async fn scan_market(
     app: AppHandle,
     strategy_id: String,
 ) -> Result<Vec<StrategyResultRow>, String> {
-    let settings = state.db.load_settings().map_err(|e| e.to_string())?;
+    log::info!("[strategy_cmd] scan_market strategy_id={}", strategy_id);
+    let start = std::time::Instant::now();
+    let settings = state.db.load_settings().map_err(|e| {
+        log::error!("[strategy_cmd] scan_market load_settings failed: {}", e);
+        e.to_string()
+    })?;
 
     let strategy = settings.strategies.iter()
         .find(|s| s.id == strategy_id)
@@ -27,7 +32,11 @@ pub async fn scan_market(
     let scanner = MarketScanner::new().map_err(|e| e.to_string())?;
 
     // 拉取全市场数据
-    let all_stocks = scanner.scan_full_market().await.map_err(|e| e.to_string())?;
+    let all_stocks = scanner.scan_full_market().await.map_err(|e| {
+        log::error!("[strategy_cmd] scan_market scan_full_market failed: {}", e);
+        e.to_string()
+    })?;
+    log::info!("[strategy_cmd] scan_market fetched {} stocks", all_stocks.len());
 
     // 消息面主题识别（失败时降级，不影响技术面主流程）
     let thematic = match ThematicScoringEngine::new() {
@@ -98,6 +107,8 @@ pub async fn scan_market(
 
     let _ = app.emit("strategy-update", &results);
 
+    log::info!("[strategy_cmd] scan_market completed: {} results in {:?}", results.len(), start.elapsed());
+
     Ok(results)
 }
 
@@ -117,6 +128,7 @@ pub async fn generate_ai_instructions(
     state: State<'_, AppState>,
     results: Vec<StrategyResultRow>,
 ) -> Result<Vec<StrategyResultRow>, String> {
+    log::info!("[strategy_cmd] generate_ai_instructions for {} stocks", results.len());
     let settings = state.db.load_settings().map_err(|e| e.to_string())?;
 
     if !settings.ai_instruction_enabled {
@@ -148,7 +160,10 @@ pub async fn generate_ai_instructions(
 
     let (instructions, token_usage) = AIService::batch_generate_instructions(&ai_config, &summaries)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::error!("[strategy_cmd] generate_ai_instructions failed: {}", e);
+            e.to_string()
+        })?;
 
     if let Some(usage) = token_usage {
         let _ = state.db.record_token_usage(

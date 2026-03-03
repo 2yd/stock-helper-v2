@@ -3,6 +3,7 @@ import { safeInvoke as invoke, safeListen } from '../hooks/useTauri';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { X, RefreshCw, Copy, Check, History } from 'lucide-react';
+import logger from '../utils/logger';
 import { StrategyResultRow, AIAnalysisResult, AIStreamEvent } from '../types';
 
 interface AIStreamPanelProps {
@@ -34,7 +35,7 @@ export default function AIStreamPanel({ stock, onClose }: AIStreamPanelProps) {
       });
       setHistory(h);
     } catch (e) {
-      console.error('Failed to load history:', e);
+      logger.error(`Failed to load history: ${e}`);
     }
   };
 
@@ -66,7 +67,7 @@ export default function AIStreamPanel({ stock, onClose }: AIStreamPanelProps) {
         contextData,
       });
     } catch (e) {
-      console.error('Analysis failed:', e);
+      logger.error(`Analysis failed: ${e}`);
       setContent('分析失败: ' + String(e));
       setStreaming(false);
     }

@@ -7,7 +7,10 @@ pub async fn fetch_cls_telegraph(count: Option<u32>) -> Result<Vec<NewsItem>, St
     let count = count.unwrap_or(30);
     news_service::fetch_cls_telegraph(count)
         .await
-        .map_err(|e| format!("获取财联社快讯失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_cls_telegraph failed: {}", e);
+            format!("获取财联社快讯失败: {}", e)
+        })
 }
 
 /// 获取东方财富财经要闻
@@ -20,7 +23,10 @@ pub async fn fetch_eastmoney_news(
     let page_size = page_size.unwrap_or(20);
     news_service::fetch_eastmoney_news(page, page_size)
         .await
-        .map_err(|e| format!("获取东方财富新闻失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_eastmoney_news failed: {}", e);
+            format!("获取东方财富新闻失败: {}", e)
+        })
 }
 
 /// 获取个股相关新闻
@@ -34,7 +40,10 @@ pub async fn fetch_stock_news(
     let page_size = page_size.unwrap_or(10);
     news_service::fetch_stock_news(&keyword, page, page_size)
         .await
-        .map_err(|e| format!("获取个股新闻失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_stock_news keyword={} failed: {}", keyword, e);
+            format!("获取个股新闻失败: {}", e)
+        })
 }
 
 /// 获取公司公告
@@ -48,7 +57,10 @@ pub async fn fetch_announcements(
     let page_size = page_size.unwrap_or(20);
     news_service::fetch_announcements(stock_code.as_deref(), page, page_size)
         .await
-        .map_err(|e| format!("获取公司公告失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_announcements failed: {}", e);
+            format!("获取公司公告失败: {}", e)
+        })
 }
 
 /// 获取研报
@@ -62,7 +74,10 @@ pub async fn fetch_reports(
     let page_size = page_size.unwrap_or(20);
     news_service::fetch_reports(stock_code.as_deref(), page, page_size)
         .await
-        .map_err(|e| format!("获取研报失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_reports failed: {}", e);
+            format!("获取研报失败: {}", e)
+        })
 }
 
 /// 获取新浪财经滚动新闻
@@ -75,7 +90,10 @@ pub async fn fetch_sina_news(
     let count = count.unwrap_or(20);
     news_service::fetch_sina_roll_news(page, count)
         .await
-        .map_err(|e| format!("获取新浪新闻失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_sina_news failed: {}", e);
+            format!("获取新浪新闻失败: {}", e)
+        })
 }
 
 /// 获取新浪7x24财经直播快讯
@@ -86,7 +104,10 @@ pub async fn fetch_sina_7x24(
     let count = count.unwrap_or(30);
     news_service::fetch_sina_7x24(count)
         .await
-        .map_err(|e| format!("获取新浪7x24快讯失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_sina_7x24 failed: {}", e);
+            format!("获取新浪7x24快讯失败: {}", e)
+        })
 }
 
 /// 获取华尔街见闻快讯
@@ -97,5 +118,8 @@ pub async fn fetch_wallstreetcn_lives(
     let count = count.unwrap_or(30);
     news_service::fetch_wallstreetcn_lives(count)
         .await
-        .map_err(|e| format!("获取华尔街见闻快讯失败: {}", e))
+        .map_err(|e| {
+            log::error!("[news_cmd] fetch_wallstreetcn_lives failed: {}", e);
+            format!("获取华尔街见闻快讯失败: {}", e)
+        })
 }

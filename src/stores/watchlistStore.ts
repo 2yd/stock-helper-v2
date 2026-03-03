@@ -6,6 +6,7 @@ import {
   StockTechnicalAnalysis,
   AIStreamEvent,
 } from '../types';
+import logger from '../utils/logger';
 
 interface MarketSnapshotRaw {
   code: string;
@@ -139,7 +140,7 @@ export const useWatchlistStore = create<WatchlistStore>((set, get) => ({
       }));
       set({ quotes, quotesLoading: false });
     } catch (e) {
-      console.error('Failed to load quotes:', e);
+      logger.error(`Failed to load quotes: ${e}`);
       set({ quotesLoading: false });
     }
   },
@@ -257,7 +258,7 @@ export const useWatchlistStore = create<WatchlistStore>((set, get) => ({
       name,
       technicalSummary,
     }).catch((e: unknown) => {
-      console.error('AI diagnosis failed:', e);
+      logger.error(`AI diagnosis failed: ${e}`);
       set({ diagnosing: false, diagnoseDone: true });
     });
 

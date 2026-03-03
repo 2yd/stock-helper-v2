@@ -13,8 +13,10 @@ pub async fn ai_pick_stocks(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("[ai_pick_cmd] ai_pick_stocks started");
     // 单飞控制：防止重复提交
     if state.ai_picking.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        log::warn!("[ai_pick_cmd] ai_pick_stocks already in progress");
         return Err("AI 选股正在进行中，请等待当前任务完成".to_string());
     }
 
@@ -100,6 +102,7 @@ pub async fn ai_pick_stocks(
 pub async fn stop_ai_pick(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("[ai_pick_cmd] stop_ai_pick requested");
     if !state.ai_picking.load(Ordering::SeqCst) {
         return Err("当前没有进行中的 AI 选股任务".to_string());
     }
@@ -112,7 +115,10 @@ pub async fn stop_ai_pick(
 pub async fn get_cached_picks(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    state.db.get_ai_pick_cache().map_err(|e| e.to_string())
+    state.db.get_ai_pick_cache().map_err(|e| {
+        log::error!("[ai_pick_cmd] get_cached_picks failed: {}", e);
+        e.to_string()
+    })
 }
 
 /// AI 找相似股：给定一只股票，找出同板块/同概念中尚未大涨的补涨机会
@@ -124,7 +130,11 @@ pub async fn find_similar_stocks(
     name: String,
     sector: String,
 ) -> Result<(), String> {
-    let settings = state.db.load_settings().map_err(|e| e.to_string())?;
+    log::info!("[ai_pick_cmd] find_similar_stocks code={} name={} sector={}", code, name, sector);
+    let settings = state.db.load_settings().map_err(|e| {
+        log::error!("[ai_pick_cmd] find_similar_stocks load_settings failed: {}", e);
+        e.to_string()
+    })?;
     let config = settings
         .ai_configs
         .iter()

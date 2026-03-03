@@ -13,6 +13,7 @@ pub async fn smart_search_stock(
     keyword: String,
     page_size: Option<usize>,
 ) -> Result<Value, String> {
+    log::info!("[smart_stock_cmd] smart_search_stock keyword={}", keyword);
     let settings = state.db.load_settings().map_err(|e| e.to_string())?;
     let qgqp_b_id = &settings.qgqp_b_id;
 
@@ -28,9 +29,13 @@ pub async fn smart_search_stock(
 /// 获取热门选股策略
 #[tauri::command]
 pub async fn get_hot_strategies() -> Result<Value, String> {
+    log::info!("[smart_stock_cmd] get_hot_strategies");
     let strategies = SmartStockService::get_hot_strategies()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::error!("[smart_stock_cmd] get_hot_strategies failed: {}", e);
+            e.to_string()
+        })?;
 
     serde_json::to_value(&strategies).map_err(|e| e.to_string())
 }
@@ -41,6 +46,7 @@ pub async fn ai_smart_pick(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    log::info!("[smart_stock_cmd] ai_smart_pick started");
     let settings = state.db.load_settings().map_err(|e| e.to_string())?;
 
     let ai_config = settings.ai_configs.iter()

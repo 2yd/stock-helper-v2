@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { safeInvoke as invoke, safeListen } from '../hooks/useTauri';
 import { AIPickTracking, AIStreamEvent, LossStock, WatchlistQuote } from '../types';
+import logger from '../utils/logger';
 
 interface MarketSnapshotRaw {
   code: string;
@@ -170,7 +171,7 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
       });
       set({ quotes: quoteMap, quotesLoading: false });
     } catch (e) {
-      console.error('Failed to load tracking quotes:', e);
+      logger.error(`Failed to load tracking quotes: ${e}`);
       set({ quotesLoading: false });
     }
   },

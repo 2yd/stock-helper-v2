@@ -8,6 +8,7 @@ import type { NewsCategory } from '../types';
 import { Tooltip } from 'antd';
 import { open } from '@tauri-apps/plugin-shell';
 import { useNewsStore, type NewsTab } from '../stores/newsStore';
+import logger from '../utils/logger';
 
 const TAB_CONFIG: { key: NewsTab; label: string; icon: React.ReactNode; color: string }[] = [
   { key: 'telegraph', label: '实时快讯', icon: <Zap size={13} />, color: 'text-yellow-400' },
@@ -87,7 +88,7 @@ export default function NewsCenter() {
     : reportLoading;
 
   const openUrl = (url: string) => {
-    if (url) open(url).catch(console.error);
+    if (url) open(url).catch((e: unknown) => logger.error(`Failed to open URL: ${e}`));
   };
 
   const formatTime = (t: string) => {

@@ -14,6 +14,7 @@ pub struct AIService;
 impl AIService {
     /// 测试 AI 配置是否可用：发送一个简单请求验证 API 连通性
     pub async fn test_ai_connection(config: &AIConfig) -> Result<String> {
+        log::info!("[ai_service] test_ai_connection model={} url={}", config.model_name, config.base_url);
         let client = build_ai_client(config.timeout_secs.min(30))?; // 测试时最多等30秒
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
 
@@ -97,6 +98,7 @@ impl AIService {
         config: &AIConfig,
         stocks: &[StockSummaryForAI],
     ) -> Result<(Vec<StockInstructionResult>, Option<TokenUsage>)> {
+        log::info!("[ai_service] batch_generate_instructions: {} stocks, model={}", stocks.len(), config.model_name);
         if stocks.is_empty() {
             return Ok((vec![], None));
         }
@@ -178,6 +180,7 @@ impl AIService {
         name: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
     ) -> Result<(String, Option<TokenUsage>)> {
+        log::info!("[ai_service] diagnose_stock_with_tools code={} name={} model={}", code, name, config.model_name);
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
         let tools = stock_tools::get_tool_definitions();
@@ -455,6 +458,7 @@ impl AIService {
         context_data: &str,
         sender: tokio::sync::mpsc::Sender<AIStreamEvent>,
     ) -> Result<(String, Option<TokenUsage>)> {
+        log::info!("[ai_service] analyze_stock_stream code={} name={} model={}", code, name, config.model_name);
         let client = build_ai_client(config.timeout_secs)?;
 
         let prompt = format!(
@@ -555,6 +559,7 @@ impl AIService {
         max_tool_rounds: usize,
         max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
+        log::info!("[ai_service] ai_pick_stocks_with_tools model={} max_rounds={} max_budget={}", config.model_name, max_tool_rounds, max_token_budget);
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
         let tools = stock_tools::get_pick_tool_definitions();
@@ -998,6 +1003,7 @@ impl AIService {
         max_tool_rounds: usize,
         max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
+        log::info!("[ai_service] find_similar_stocks_with_tools code={} name={} sector={} model={}", code, name, sector, config.model_name);
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
         let tools = stock_tools::get_pick_tool_definitions();
@@ -1316,6 +1322,7 @@ impl AIService {
         max_tool_rounds: usize,
         max_token_budget: u32,
     ) -> Result<(String, Option<TokenUsage>)> {
+        log::info!("[ai_service] analyze_loss_reasons_with_tools date={} stocks={} model={}", date, loss_stocks.len(), config.model_name);
         let client = build_ai_client(config.timeout_secs)?;
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
         let tools = stock_tools::get_pick_tool_definitions();

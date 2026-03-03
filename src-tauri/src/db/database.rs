@@ -15,17 +15,23 @@ pub struct Database {
 
 impl Database {
     pub fn new(data_dir: PathBuf) -> Result<Self> {
+        log::info!("[database] initializing database at {:?}", data_dir);
         std::fs::create_dir_all(&data_dir)?;
         let db_path = data_dir.join("stock_helper.db");
-        let conn = Connection::open(db_path)?;
+        let conn = Connection::open(&db_path).map_err(|e| {
+            log::error!("[database] failed to open database at {:?}: {}", db_path, e);
+            e
+        })?;
         let db = Self {
             conn: Mutex::new(conn),
         };
         db.migrate()?;
+        log::info!("[database] database initialized successfully");
         Ok(db)
     }
 
     fn migrate(&self) -> Result<()> {
+        log::info!("[database] running migrations");
         let conn = self.conn.lock().unwrap();
         conn.execute_batch(
             "
@@ -115,7 +121,10 @@ impl Database {
         conn.execute(
             "INSERT OR REPLACE INTO settings (id, data, updated_at) VALUES ('default', ?1, datetime('now'))",
             rusqlite::params![data],
-        )?;
+        ).map_err(|e| {
+            log::error!("[database] save_settings failed: {}", e);
+            e
+        })?;
         Ok(())
     }
 
@@ -199,6 +208,7 @@ impl Database {
     }
 
     pub fn save_daily_history(&self, records: &[StockDailyHistory]) -> Result<()> {
+        log::info!("[database] save_daily_history: {} records", records.len());
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         for r in records {

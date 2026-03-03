@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
-import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap } from 'lucide-react';
+import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AIConfig } from '../types';
 
 export default function Settings() {
   const { message } = App.useApp();
-  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId } = useSettingsStore();
+  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId, exportLogs, exportingLogs } = useSettingsStore();
 
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
@@ -513,6 +513,43 @@ export default function Settings() {
           </div>
         </section>
       )}
+
+      {/* 日志导出 */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <FileDown size={18} className="text-functional-info" />
+          <h2 className="text-base font-bold text-txt-primary">日志管理</h2>
+        </div>
+
+        <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card flex items-center justify-between">
+          <div>
+            <span className="text-sm text-txt-primary">导出日志文件</span>
+            <p className="text-xs text-txt-muted mt-1">将应用日志打包为 ZIP 文件，便于发送给开发者诊断问题</p>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                const result = await exportLogs();
+                message.success(result);
+              } catch (e: unknown) {
+                const errMsg = e instanceof Error ? e.message : String(e);
+                if (!errMsg.includes('取消')) {
+                  message.error(`导出失败: ${errMsg}`);
+                }
+              }
+            }}
+            disabled={exportingLogs}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-functional-info/20 text-functional-info hover:bg-functional-info/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {exportingLogs ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <FileDown size={14} />
+            )}
+            {exportingLogs ? '导出中...' : '导出日志'}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

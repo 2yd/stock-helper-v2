@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { safeInvoke as invoke } from '../hooks/useTauri';
 import { NewsItem, AnnouncementItem, ReportItem } from '../types';
+import logger from '../utils/logger';
 
 export type NewsTab = 'telegraph' | 'news' | 'announcement' | 'report';
 
@@ -83,7 +84,7 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
 
       set({ telegraphs: combined, telegraphLoading: false });
     } catch (e) {
-      console.error('获取快讯失败:', e);
+      logger.error(`获取快讯失败: ${e}`);
       set({ telegraphLoading: false });
     }
   },
@@ -109,7 +110,7 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
         newsLoading: false,
       });
     } catch (e) {
-      console.error('获取新闻失败:', e);
+      logger.error(`获取新闻失败: ${e}`);
       set({ newsLoading: false });
     }
   },
@@ -130,7 +131,7 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
         announcementLoading: false,
       });
     } catch (e) {
-      console.error('获取公告失败:', e);
+      logger.error(`获取公告失败: ${e}`);
       set({ announcementLoading: false });
     }
   },
@@ -151,7 +152,7 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
         reportLoading: false,
       });
     } catch (e) {
-      console.error('获取研报失败:', e);
+      logger.error(`获取研报失败: ${e}`);
       set({ reportLoading: false });
     }
   },
@@ -170,7 +171,7 @@ export const useNewsStore = create<NewsStore>((set, get) => ({
       });
       set({ stockNews: items, stockNewsLoading: false });
     } catch (e) {
-      console.error('获取个股新闻失败:', e);
+      logger.error(`获取个股新闻失败: ${e}`);
       set({ stockNewsLoading: false });
     }
   },

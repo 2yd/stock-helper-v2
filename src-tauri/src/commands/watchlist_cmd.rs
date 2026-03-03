@@ -13,6 +13,7 @@ pub async fn add_watchlist_stock(
     code: String,
     name: String,
 ) -> Result<(), String> {
+    log::info!("[watchlist_cmd] add_watchlist_stock code={} name={}", code, name);
     let stock = WatchlistStock {
         code,
         name,
@@ -20,7 +21,10 @@ pub async fn add_watchlist_stock(
         group_name: String::new(),
         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     };
-    state.db.add_watchlist_stock(&stock).map_err(|e| e.to_string())
+    state.db.add_watchlist_stock(&stock).map_err(|e| {
+        log::error!("[watchlist_cmd] add_watchlist_stock failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -28,14 +32,21 @@ pub async fn remove_watchlist_stock(
     state: State<'_, AppState>,
     code: String,
 ) -> Result<(), String> {
-    state.db.remove_watchlist_stock(&code).map_err(|e| e.to_string())
+    log::info!("[watchlist_cmd] remove_watchlist_stock code={}", code);
+    state.db.remove_watchlist_stock(&code).map_err(|e| {
+        log::error!("[watchlist_cmd] remove_watchlist_stock failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub async fn get_watchlist_stocks(
     state: State<'_, AppState>,
 ) -> Result<Vec<WatchlistStock>, String> {
-    state.db.get_watchlist_stocks().map_err(|e| e.to_string())
+    state.db.get_watchlist_stocks().map_err(|e| {
+        log::error!("[watchlist_cmd] get_watchlist_stocks failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -43,7 +54,10 @@ pub async fn reorder_watchlist(
     state: State<'_, AppState>,
     codes: Vec<String>,
 ) -> Result<(), String> {
-    state.db.reorder_watchlist(&codes).map_err(|e| e.to_string())
+    state.db.reorder_watchlist(&codes).map_err(|e| {
+        log::error!("[watchlist_cmd] reorder_watchlist failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -53,6 +67,7 @@ pub async fn get_stock_technical_analysis(
     name: String,
     period: String,
 ) -> Result<StockTechnicalAnalysis, String> {
+    log::info!("[watchlist_cmd] get_stock_technical_analysis code={} period={}", code, period);
     let period = if period.is_empty() { "day".to_string() } else { period };
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
@@ -137,12 +152,19 @@ pub async fn ai_diagnose_stock(
     #[allow(unused_variables)]
     technical_summary: String,
 ) -> Result<(), String> {
-    let settings = state.db.load_settings().map_err(|e| e.to_string())?;
+    log::info!("[watchlist_cmd] ai_diagnose_stock code={} name={}", code, name);
+    let settings = state.db.load_settings().map_err(|e| {
+        log::error!("[watchlist_cmd] ai_diagnose_stock load_settings failed: {}", e);
+        e.to_string()
+    })?;
 
     let ai_config = settings.ai_configs.iter()
         .find(|c| Some(c.id.clone()) == settings.active_ai_config_id && c.enabled)
         .cloned()
-        .ok_or("未配置AI模型".to_string())?;
+        .ok_or_else(|| {
+            log::error!("[watchlist_cmd] ai_diagnose_stock: 未配置AI模型");
+            "未配置AI模型".to_string()
+        })?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<AIStreamEvent>(100);
 
@@ -160,7 +182,10 @@ pub async fn ai_diagnose_stock(
         &code,
         &name,
         tx,
-    ).await.map_err(|e| e.to_string())?;
+    ).await.map_err(|e| {
+        log::error!("[watchlist_cmd] ai_diagnose_stock failed for {}: {}", code, e);
+        e.to_string()
+    })?;
 
     let analysis = AIAnalysisResult {
         id: uuid::Uuid::new_v4().to_string(),

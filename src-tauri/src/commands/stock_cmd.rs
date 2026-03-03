@@ -10,12 +10,19 @@ pub async fn get_realtime_data(
     state: State<'_, AppState>,
     codes: Vec<String>,
 ) -> Result<Vec<StockInfo>, String> {
+    log::info!("[stock_cmd] get_realtime_data codes_count={}", codes.len());
     let formatted: Vec<String> = codes.iter().map(|c| format_stock_code(c)).collect();
-    let settings = state.db.load_settings().map_err(|e| e.to_string())?;
+    let settings = state.db.load_settings().map_err(|e| {
+        log::error!("[stock_cmd] get_realtime_data load_settings failed: {}", e);
+        e.to_string()
+    })?;
     let use_sina = matches!(settings.data_source_primary, crate::models::settings::DataSource::Sina);
 
     let service = StockDataService::new().map_err(|e| e.to_string())?;
-    service.get_realtime_batch(&formatted, use_sina).await.map_err(|e| e.to_string())
+    service.get_realtime_batch(&formatted, use_sina).await.map_err(|e| {
+        log::error!("[stock_cmd] get_realtime_data failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -24,13 +31,18 @@ pub async fn get_kline_data(
     scale: String,
     days: u32,
 ) -> Result<Vec<KLineData>, String> {
+    log::info!("[stock_cmd] get_kline_data code={} scale={} days={}", code, scale, days);
     let service = StockDataService::new().map_err(|e| e.to_string())?;
     let formatted = format_stock_code(&code);
-    service.get_kline_data(&formatted, &scale, days).await.map_err(|e| e.to_string())
+    service.get_kline_data(&formatted, &scale, days).await.map_err(|e| {
+        log::error!("[stock_cmd] get_kline_data failed for {}: {}", code, e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub async fn search_stocks(keyword: String) -> Result<Vec<StockSearchResult>, String> {
+    log::info!("[stock_cmd] search_stocks keyword={}", keyword);
     let keyword = keyword.trim().to_string();
     if keyword.is_empty() {
         return Ok(vec![]);
@@ -83,9 +95,13 @@ pub async fn search_stocks(keyword: String) -> Result<Vec<StockSearchResult>, St
 pub async fn get_watchlist_enriched(
     codes: Vec<String>,
 ) -> Result<Vec<MarketStockSnapshot>, String> {
+    log::info!("[stock_cmd] get_watchlist_enriched codes_count={}", codes.len());
     if codes.is_empty() {
         return Ok(vec![]);
     }
     let scanner = MarketScanner::new().map_err(|e| e.to_string())?;
-    scanner.fetch_stocks_by_codes(&codes).await.map_err(|e| e.to_string())
+    scanner.fetch_stocks_by_codes(&codes).await.map_err(|e| {
+        log::error!("[stock_cmd] get_watchlist_enriched failed: {}", e);
+        e.to_string()
+    })
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { safeInvoke, safeListen } from '../hooks/useTauri';
 import { AIPickRecommendation, AIStreamEvent } from '../types';
+import logger from '../utils/logger';
 
 interface ToolCallStatus {
   name: string;
@@ -50,18 +51,18 @@ function parseRecommendations(content: string): AIPickRecommendation[] {
     const jsonStr = picksMatch[1].trim();
     const parsed = JSON.parse(jsonStr);
     if (!Array.isArray(parsed)) {
-      console.warn('[AI Pick] PICKS 标签内容不是 JSON 数组:', jsonStr.slice(0, 200));
+      logger.warn(`[AI Pick] PICKS 标签内容不是 JSON 数组: ${jsonStr.slice(0, 200)}`);
       return [];
     }
     const valid = parsed.filter(
       (item: AIPickRecommendation) => item.code && item.name && item.reason && item.rating,
     );
     if (valid.length === 0 && parsed.length > 0) {
-      console.warn('[AI Pick] PICKS 数组中无有效推荐项，缺少必要字段(code/name/reason/rating)');
+      logger.warn('[AI Pick] PICKS 数组中无有效推荐项，缺少必要字段(code/name/reason/rating)');
     }
     return valid;
   } catch (e) {
-    console.warn('[AI Pick] PICKS JSON 解析失败:', e, '原始内容:', picksMatch[1]?.slice(0, 300));
+    logger.warn(`[AI Pick] PICKS JSON 解析失败: ${e}`);
     return [];
   }
 }

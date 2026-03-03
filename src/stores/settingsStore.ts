@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { safeInvoke as invoke } from '../hooks/useTauri';
 import { AppSettings, AIConfig, StrategyConfig } from '../types';
+import logger from '../utils/logger';
 
 const defaultSettings: AppSettings = {
   refresh_interval_secs: 30,
@@ -36,6 +37,7 @@ interface SettingsStore {
   settings: AppSettings | null;
   loading: boolean;
   testingConfigId: string | null;
+  exportingLogs: boolean;
 
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -45,12 +47,14 @@ interface SettingsStore {
   setActiveAIConfig: (configId: string) => Promise<void>;
   updateStrategy: (strategy: StrategyConfig) => Promise<void>;
   testAIConfig: (config: AIConfig) => Promise<string>;
+  exportLogs: () => Promise<string>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
   settings: null,
   loading: false,
   testingConfigId: null,
+  exportingLogs: false,
 
   loadSettings: async () => {
     set({ loading: true });
@@ -58,7 +62,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('get_settings');
       set({ settings, loading: false });
     } catch (e) {
-      console.error('Failed to load settings, using defaults:', e);
+      logger.error(`Failed to load settings: ${e}`);
       set({ settings: { ...defaultSettings }, loading: false });
     }
   },
@@ -68,7 +72,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       await invoke('save_settings', { settings });
       set({ settings });
     } catch (e) {
-      console.error('Failed to save settings:', e);
+      logger.error(`Failed to save settings: ${e}`);
     }
   },
 
@@ -77,7 +81,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('add_ai_config', { config });
       set({ settings });
     } catch (e) {
-      console.error('Failed to add AI config:', e);
+      logger.error(`Failed to add AI config: ${e}`);
     }
   },
 
@@ -86,7 +90,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('remove_ai_config', { configId });
       set({ settings });
     } catch (e) {
-      console.error('Failed to remove AI config:', e);
+      logger.error(`Failed to remove AI config: ${e}`);
     }
   },
 
@@ -95,7 +99,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('update_ai_config', { config });
       set({ settings });
     } catch (e) {
-      console.error('Failed to update AI config:', e);
+      logger.error(`Failed to update AI config: ${e}`);
     }
   },
 
@@ -104,7 +108,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('set_active_ai_config', { configId });
       set({ settings });
     } catch (e) {
-      console.error('Failed to set active AI config:', e);
+      logger.error(`Failed to set active AI config: ${e}`);
     }
   },
 
@@ -113,7 +117,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await invoke<AppSettings>('update_strategy_config', { strategy });
       set({ settings });
     } catch (e) {
-      console.error('Failed to update strategy:', e);
+      logger.error(`Failed to update strategy: ${e}`);
     }
   },
 
@@ -126,6 +130,18 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       throw e;
     } finally {
       set({ testingConfigId: null });
+    }
+  },
+
+  exportLogs: async () => {
+    set({ exportingLogs: true });
+    try {
+      const result = await invoke<string>('export_logs');
+      return result;
+    } catch (e: unknown) {
+      throw e;
+    } finally {
+      set({ exportingLogs: false });
     }
   },
 }));

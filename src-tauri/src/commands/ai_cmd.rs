@@ -11,12 +11,19 @@ pub async fn analyze_stock(
     name: String,
     context_data: String,
 ) -> Result<(), String> {
-    let settings = state.db.load_settings().map_err(|e| e.to_string())?;
+    log::info!("[ai_cmd] analyze_stock code={} name={}", code, name);
+    let settings = state.db.load_settings().map_err(|e| {
+        log::error!("[ai_cmd] analyze_stock load_settings failed: {}", e);
+        e.to_string()
+    })?;
 
     let ai_config = settings.ai_configs.iter()
         .find(|c| Some(c.id.clone()) == settings.active_ai_config_id && c.enabled)
         .cloned()
-        .ok_or("未配置AI模型".to_string())?;
+        .ok_or_else(|| {
+            log::error!("[ai_cmd] analyze_stock: 未配置AI模型");
+            "未配置AI模型".to_string()
+        })?;
 
     // Check if we have a cached analysis for today
     if let Ok(Some(cached)) = state.db.get_today_ai_analysis(&code) {
@@ -44,7 +51,10 @@ pub async fn analyze_stock(
         &name,
         &context_data,
         tx,
-    ).await.map_err(|e| e.to_string())?;
+    ).await.map_err(|e| {
+        log::error!("[ai_cmd] analyze_stock stream failed for {}: {}", code, e);
+        e.to_string()
+    })?;
 
     // Save result to DB
     let analysis = AIAnalysisResult {
@@ -72,12 +82,19 @@ pub async fn get_analysis_history(
     code: String,
     limit: usize,
 ) -> Result<Vec<AIAnalysisResult>, String> {
-    state.db.get_ai_analysis_history(&code, limit).map_err(|e| e.to_string())
+    log::info!("[ai_cmd] get_analysis_history code={} limit={}", code, limit);
+    state.db.get_ai_analysis_history(&code, limit).map_err(|e| {
+        log::error!("[ai_cmd] get_analysis_history failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub async fn get_today_token_usage(
     state: State<'_, AppState>,
 ) -> Result<u32, String> {
-    state.db.get_today_token_usage().map_err(|e| e.to_string())
+    state.db.get_today_token_usage().map_err(|e| {
+        log::error!("[ai_cmd] get_today_token_usage failed: {}", e);
+        e.to_string()
+    })
 }

@@ -14,6 +14,7 @@ pub async fn add_tracking_stock(
     reason: String,
     sector: String,
 ) -> Result<(), String> {
+    log::info!("[tracking_cmd] add_tracking_stock code={} name={}", code, name);
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let tracking = AIPickTracking {
@@ -26,7 +27,10 @@ pub async fn add_tracking_stock(
         sector,
         created_at: now,
     };
-    state.db.add_tracking_stock(&tracking).map_err(|e| e.to_string())
+    state.db.add_tracking_stock(&tracking).map_err(|e| {
+        log::error!("[tracking_cmd] add_tracking_stock failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -35,14 +39,21 @@ pub async fn remove_tracking_stock(
     code: String,
     added_date: String,
 ) -> Result<(), String> {
-    state.db.remove_tracking_stock(&code, &added_date).map_err(|e| e.to_string())
+    log::info!("[tracking_cmd] remove_tracking_stock code={} date={}", code, added_date);
+    state.db.remove_tracking_stock(&code, &added_date).map_err(|e| {
+        log::error!("[tracking_cmd] remove_tracking_stock failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
 pub async fn get_tracking_stocks(
     state: State<'_, AppState>,
 ) -> Result<Vec<AIPickTracking>, String> {
-    state.db.get_tracking_stocks().map_err(|e| e.to_string())
+    state.db.get_tracking_stocks().map_err(|e| {
+        log::error!("[tracking_cmd] get_tracking_stocks failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
@@ -50,7 +61,11 @@ pub async fn clear_tracking_by_date(
     state: State<'_, AppState>,
     date: String,
 ) -> Result<(), String> {
-    state.db.clear_tracking_by_date(&date).map_err(|e| e.to_string())
+    log::info!("[tracking_cmd] clear_tracking_by_date date={}", date);
+    state.db.clear_tracking_by_date(&date).map_err(|e| {
+        log::error!("[tracking_cmd] clear_tracking_by_date failed: {}", e);
+        e.to_string()
+    })
 }
 
 /// AI 败因分析命令
@@ -61,6 +76,7 @@ pub async fn analyze_loss_reasons(
     date: String,
     loss_stocks: Vec<LossStock>,
 ) -> Result<(), String> {
+    log::info!("[tracking_cmd] analyze_loss_reasons date={} stocks={}", date, loss_stocks.len());
     if loss_stocks.is_empty() {
         return Err("没有亏损股票需要分析".to_string());
     }

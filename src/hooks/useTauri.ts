@@ -1,11 +1,12 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen, type EventCallback, type UnlistenFn } from '@tauri-apps/api/event';
+import logger from '../utils/logger';
 
 export const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 
 export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauri) {
-    console.warn(`[mock] invoke("${cmd}") — not in Tauri runtime`);
+    logger.warn(`[mock] invoke("${cmd}") — not in Tauri runtime`);
     return getMockData(cmd) as T;
   }
   return tauriInvoke<T>(cmd, args);
@@ -13,7 +14,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
 
 export async function safeListen<T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> {
   if (!isTauri) {
-    console.warn(`[mock] listen("${event}") — not in Tauri runtime`);
+    logger.warn(`[mock] listen("${event}") — not in Tauri runtime`);
     return () => {};
   }
   return tauriListen<T>(event, handler);
