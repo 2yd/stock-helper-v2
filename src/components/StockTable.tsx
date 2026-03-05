@@ -2,13 +2,11 @@ import { useMemo, useCallback } from 'react';
 import { Table, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Trash2 } from 'lucide-react';
-import { StrategyResultRow, StockLabel, AIInstruction } from '../types';
-import ScoreBadge from './ScoreBadge';
+import { StockLabel } from '../types';
 import TagLabel from './TagLabel';
-import InstructionTag from './InstructionTag';
 
 /* ------------------------------------------------------------------ */
-/*  Unified row type — both watchlist and strategy feed into this      */
+/*  Unified row type — watchlist data                                  */
 /* ------------------------------------------------------------------ */
 
 /** 统一行数据：单位约定
@@ -33,22 +31,7 @@ export interface UnifiedStockRow {
   amount: number;             // 万
   pct_5d: number;
   pct_20d: number;
-  // 以下字段策略模式专用，盯盘模式可为 undefined
-  score?: number;
-  score_detail?: {
-    value_score: number;
-    quality_score: number;
-    momentum_score: number;
-    capital_score: number;
-    risk_score: number;
-    sentiment_score: number;
-  };
-  sentiment_score?: number;
-  news_heat?: number;
-  matched_themes?: string[];
   labels?: StockLabel[];
-  instruction?: AIInstruction | null;
-  // 盯盘模式专用
   hasQuote?: boolean;
 }
 
@@ -56,34 +39,20 @@ export interface UnifiedStockRow {
 /*  Props                                                              */
 /* ------------------------------------------------------------------ */
 
-interface BaseProps {
+interface StockTableProps {
   data: UnifiedStockRow[];
   loading: boolean;
   scrollY?: string;
-}
-
-interface StrategyModeProps extends BaseProps {
-  mode: 'strategy';
-  onStockClick: (row: UnifiedStockRow) => void;
-  onRemove?: never;
-  onRowClick?: never;
-}
-
-interface WatchlistModeProps extends BaseProps {
-  mode: 'watchlist';
   onRowClick: (code: string) => void;
   onRemove: (code: string) => void;
-  onStockClick?: never;
 }
-
-type StockTableProps = StrategyModeProps | WatchlistModeProps;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export default function StockTable(props: StockTableProps) {
-  const { data, loading, mode, scrollY } = props;
+  const { data, loading, scrollY } = props;
 
   /* — shared cell renderers — */
 
@@ -94,7 +63,7 @@ export default function StockTable(props: StockTableProps) {
 
   const pctCell = useCallback(
     (val: number, row?: UnifiedStockRow) => {
-      if (mode === 'watchlist' && row && !row.hasQuote) return <span className="text-txt-muted">-</span>;
+      if (row && !row.hasQuote) return <span className="text-txt-muted">-</span>;
       const color = pctColor(val);
       return (
         <span className={`${color} font-mono font-semibold tabular-nums`}>
@@ -102,13 +71,13 @@ export default function StockTable(props: StockTableProps) {
         </span>
       );
     },
-    [mode, pctColor],
+    [pctColor],
   );
 
-  /** 如果是盯盘模式且无行情，返回 '-' */
+  /** 如果无行情，返回 '-' */
   const guard = useCallback(
-    (row: UnifiedStockRow) => mode === 'watchlist' && !row.hasQuote,
-    [mode],
+    (row: UnifiedStockRow) => !row.hasQuote,
+    [],
   );
 
   /* — columns — */
@@ -140,9 +109,7 @@ export default function StockTable(props: StockTableProps) {
           className="text-txt-primary hover:text-primary-gold transition-colors font-medium cursor-pointer bg-transparent border-none text-left"
           onClick={(e) => {
             e.stopPropagation();
-            if (mode === 'strategy' && props.onStockClick) {
-              props.onStockClick(record);
-            } else if (mode === 'watchlist' && props.onRowClick) {
+            if (props.onRowClick) {
               props.onRowClick(record.code);
             }
           }}
@@ -152,39 +119,6 @@ export default function StockTable(props: StockTableProps) {
       ),
     });
 
-    // 综合分 (策略模式)
-    if (mode === 'strategy') {
-      cols.push({
-        title: '综合分',
-        dataIndex: 'score',
-        key: 'score',
-        width: 70,
-        sorter: (a, b) => (a.score ?? 0) - (b.score ?? 0),
-        defaultSortOrder: 'descend',
-        render: (score: number, record) => (
-          <Tooltip
-            title={
-              <div className="text-xs space-y-1">
-                <div>价值: {((record.score_detail?.value_score ?? 0) * 100).toFixed(0)}</div>
-                <div>质量: {((record.score_detail?.quality_score ?? 0) * 100).toFixed(0)}</div>
-                <div>动量: {((record.score_detail?.momentum_score ?? 0) * 100).toFixed(0)}</div>
-                <div>资金: {((record.score_detail?.capital_score ?? 0) * 100).toFixed(0)}</div>
-                <div>风险: {((record.score_detail?.risk_score ?? 0) * 100).toFixed(0)}</div>
-                <div>消息: {((record.score_detail?.sentiment_score ?? 0) * 100).toFixed(0)}</div>
-                {record.matched_themes && record.matched_themes.length > 0 && (
-                  <div className="pt-1 border-t border-white/20">
-                    主题: {record.matched_themes.join('、')}
-                  </div>
-                )}
-              </div>
-            }
-          >
-            <span><ScoreBadge score={score ?? 0} /></span>
-          </Tooltip>
-        ),
-      });
-    }
-
     // 最新价
     cols.push({
       title: '最新价',
@@ -193,7 +127,7 @@ export default function StockTable(props: StockTableProps) {
       width: 70,
       sorter: (a, b) => a.price - b.price,
       render: (v: number, r) => (
-        <span className={`font-mono tabular-nums ${mode === 'watchlist' ? pctColor(r.change_pct) : 'text-txt-primary'}`}>
+        <span className={`font-mono tabular-nums ${pctColor(r.change_pct)}`}>
           {guard(r) ? '-' : v.toFixed(2)}
         </span>
       ),
@@ -206,7 +140,7 @@ export default function StockTable(props: StockTableProps) {
       key: 'change_pct',
       width: 72,
       sorter: (a, b) => a.change_pct - b.change_pct,
-      defaultSortOrder: mode === 'watchlist' ? 'descend' : undefined,
+      defaultSortOrder: 'descend',
       render: (v: number, r) => pctCell(v, r),
     });
 
@@ -263,18 +197,6 @@ export default function StockTable(props: StockTableProps) {
         </span>
       ),
     });
-
-    // 营收增% (策略模式)
-    if (mode === 'strategy') {
-      cols.push({
-        title: '营收增%',
-        dataIndex: 'revenue_yoy',
-        key: 'revenue_yoy',
-        width: 72,
-        sorter: (a, b) => a.revenue_yoy - b.revenue_yoy,
-        render: (v: number, r) => pctCell(v, r),
-      });
-    }
 
     // 市值
     cols.push({
@@ -357,23 +279,21 @@ export default function StockTable(props: StockTableProps) {
       render: (v: number, r) => pctCell(v, r),
     });
 
-    // 成交额 (盯盘模式)
-    if (mode === 'watchlist') {
-      cols.push({
-        title: '成交额',
-        dataIndex: 'amount',
-        key: 'amount',
-        width: 80,
-        sorter: (a, b) => a.amount - b.amount,
-        render: (v: number, r) => {
-          if (guard(r) || v <= 0) return <span className="text-txt-muted">-</span>;
-          if (v >= 10000) return <span className="text-primary-gold font-semibold">{(v / 10000).toFixed(2)}亿</span>;
-          return <span className="text-txt-secondary">{v.toFixed(0)}万</span>;
-        },
-      });
-    }
+    // 成交额
+    cols.push({
+      title: '成交额',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 80,
+      sorter: (a, b) => a.amount - b.amount,
+      render: (v: number, r) => {
+        if (guard(r) || v <= 0) return <span className="text-txt-muted">-</span>;
+        if (v >= 10000) return <span className="text-primary-gold font-semibold">{(v / 10000).toFixed(2)}亿</span>;
+        return <span className="text-txt-secondary">{v.toFixed(0)}万</span>;
+      },
+    });
 
-    // 标签 (两种模式都显示)
+    // 标签
     cols.push({
       title: '标签',
       key: 'labels',
@@ -391,55 +311,38 @@ export default function StockTable(props: StockTableProps) {
       },
     });
 
-    // AI (策略模式)
-    if (mode === 'strategy') {
-      cols.push({
-        title: 'AI',
-        key: 'instruction',
-        width: 100,
-        render: (_: unknown, record: UnifiedStockRow) =>
-          record.instruction
-            ? <InstructionTag instruction={record.instruction} />
-            : <span className="text-txt-muted text-xs">-</span>,
-      });
-    }
-
-    // 删除按钮 (盯盘模式)
-    if (mode === 'watchlist') {
-      cols.push({
-        title: '',
-        key: 'action',
-        width: 40,
-        render: (_: unknown, record: UnifiedStockRow) => (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (props.onRemove) props.onRemove(record.code);
-            }}
-            className="p-1 rounded hover:bg-red-500/20 transition-all cursor-pointer opacity-30 hover:opacity-100"
-          >
-            <Trash2 size={12} className="text-functional-up" />
-          </button>
-        ),
-      });
-    }
+    // 删除按钮
+    cols.push({
+      title: '',
+      key: 'action',
+      width: 40,
+      render: (_: unknown, record: UnifiedStockRow) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (props.onRemove) props.onRemove(record.code);
+          }}
+          className="p-1 rounded hover:bg-red-500/20 transition-all cursor-pointer opacity-30 hover:opacity-100"
+        >
+          <Trash2 size={12} className="text-functional-up" />
+        </button>
+      ),
+    });
 
     return cols;
-  }, [mode, pctCell, pctColor, guard, props]);
+  }, [pctCell, pctColor, guard, props]);
 
-  /* — row click (watchlist) — */
+  /* — row click — */
   const onRow = useMemo(() => {
-    if (mode !== 'watchlist') return undefined;
     return (record: UnifiedStockRow) => ({
       onClick: () => {
         if (props.onRowClick) props.onRowClick(record.code);
       },
       style: { cursor: 'pointer' as const },
     });
-  }, [mode, props]);
+  }, [props]);
 
-  const scrollX = mode === 'strategy' ? 1500 : 1400;
-  const yVal = scrollY || (mode === 'strategy' ? 'calc(100vh - 170px)' : 'calc(100vh - 130px)');
+  const yVal = scrollY || 'calc(100vh - 130px)';
 
   return (
     <Table
@@ -449,22 +352,11 @@ export default function StockTable(props: StockTableProps) {
       loading={loading}
       pagination={false}
       size="small"
-      scroll={{ x: scrollX, y: yVal }}
+      scroll={{ x: 1400, y: yVal }}
       className="stock-table"
       onRow={onRow}
     />
   );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helper: convert StrategyResultRow → UnifiedStockRow                */
-/* ------------------------------------------------------------------ */
-
-export function strategyRowToUnified(row: StrategyResultRow): UnifiedStockRow {
-  return {
-    ...row,
-    hasQuote: true,
-  };
 }
 
 /* ------------------------------------------------------------------ */

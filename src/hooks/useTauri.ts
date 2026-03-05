@@ -30,48 +30,11 @@ function getMockData(cmd: string): unknown {
         data_source_primary: 'sina',
         ai_configs: [],
         active_ai_config_id: null,
-        strategies: [
-          {
-            id: 'default',
-            name: '多因子综合选股',
-            description: '基于价值、质量、动量、资金、风险五大维度的量化选股策略',
-            watch_codes: [],
-            weights: {
-              value: 15,
-              quality: 15,
-              momentum: 30,
-              capital: 25,
-              risk: 15,
-            },
-            filters: {
-              exclude_st: true,
-              exclude_new_stock_days: 60,
-              min_market_cap: 30,
-              max_market_cap: 0,
-              min_price: 3,
-              min_amount: 5000,
-              pe_max: 100,
-              pe_min: 0,
-              pb_max: 20,
-              roe_min: 5,
-            },
-            enabled: true,
-            top_n: 50,
-          },
-        ],
-        active_strategy_id: 'default',
         token_usage_today: 0,
         qgqp_b_id: '',
+        max_pick_tool_rounds: 10,
+        max_pick_token_budget: 100000,
       };
-    case 'get_market_status':
-      return '休市';
-    case 'get_today_token_usage':
-      return 0;
-    case 'scan_market':
-    case 'refresh_strategy':
-      return [];
-    case 'get_market_stock_count':
-      return 0;
     case 'get_hot_strategies':
       return [];
     case 'smart_search_stock':

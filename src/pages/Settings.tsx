@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
-import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown, RefreshCw, Info } from 'lucide-react';
+import { Plus, Trash2, Bot, Database, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown, RefreshCw, Info } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 import { safeInvoke as invoke, isTauri } from '../hooks/useTauri';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -10,7 +10,7 @@ import type { UpdateInfo } from '../components/UpdateModal';
 
 export default function Settings() {
   const { message } = App.useApp();
-  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId, exportLogs, exportingLogs } = useSettingsStore();
+  const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, testAIConfig, testingConfigId, exportLogs, exportingLogs } = useSettingsStore();
 
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [appVersion, setAppVersion] = useState('');
@@ -67,8 +67,6 @@ export default function Settings() {
       message.error(`测试失败: ${errMsg}`);
     }
   };
-
-  const activeStrategy = settings.strategies.find(s => s.id === settings.active_strategy_id);
 
   const inputStyle = { background: '#0D1117', borderColor: '#30363D', color: '#E6EDF3' };
 
@@ -339,191 +337,6 @@ export default function Settings() {
           </div>
         </div>
       </section>
-
-      {/* Factor Weights */}
-      {activeStrategy && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Sliders size={18} className="text-primary-gold" />
-            <h2 className="text-base font-bold text-txt-primary">因子权重配置</h2>
-            <span className="text-xs text-txt-muted ml-2">
-              总计: {activeStrategy.weights.value + activeStrategy.weights.quality + activeStrategy.weights.momentum + activeStrategy.weights.capital + activeStrategy.weights.risk + (activeStrategy.weights.sentiment || 0)}%
-            </span>
-          </div>
-
-          <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card space-y-3">
-            {[
-              { key: 'value', label: '价值因子（PE/PB综合）', color: 'text-green-400', desc: 'PE越低、PB越低得分越高' },
-              { key: 'quality', label: '质量因子（ROE/营收增长）', color: 'text-blue-400', desc: 'ROE越高、营收增速越快得分越高' },
-              { key: 'momentum', label: '动量因子（涨幅/量比）', color: 'text-orange-400', desc: '近期适度上涨趋势，但惩罚过热' },
-              { key: 'capital', label: '资金因子（主力净流入/换手）', color: 'text-red-400', desc: '主力资金流入越多、换手率适中得分越高' },
-              { key: 'risk', label: '风险因子（市值/波动率）', color: 'text-purple-400', desc: '市值适中、波动适中最优' },
-              { key: 'sentiment', label: '消息因子（新闻/主题热度）', color: 'text-yellow-400', desc: '根据新闻热点匹配概念板块，捕捉消息面驱动的行情' },
-            ].map(item => (
-              <div key={item.key}>
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
-                    <span className="text-[10px] text-txt-muted ml-2">{item.desc}</span>
-                  </div>
-                  <span className="text-xs text-txt-muted w-10 text-right font-mono">
-                    {(activeStrategy.weights as unknown as Record<string, number>)[item.key]}%
-                  </span>
-                </div>
-                <Slider
-                  min={0}
-                  max={50}
-                  step={5}
-                  value={(activeStrategy.weights as unknown as Record<string, number>)[item.key]}
-                  onChange={v => {
-                    const newWeights = { ...activeStrategy.weights, [item.key]: v };
-                    updateStrategy({ ...activeStrategy, weights: newWeights });
-                  }}
-                />
-              </div>
-            ))}
-
-            <div className="flex items-center justify-between pt-2 border-t border-[#30363D]">
-              <span className="text-sm text-txt-primary">输出 Top N</span>
-              <InputNumber
-                size="small"
-                min={10}
-                max={200}
-                step={10}
-                value={activeStrategy.top_n}
-                onChange={v => updateStrategy({ ...activeStrategy, top_n: v || 50 })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Stock Filters */}
-      {activeStrategy && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Filter size={18} className="text-functional-info" />
-            <h2 className="text-base font-bold text-txt-primary">筛选条件</h2>
-          </div>
-
-          <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card grid grid-cols-2 gap-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">排除 ST</span>
-              <Switch
-                checked={activeStrategy.filters.exclude_st}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, exclude_st: v } })}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">排除次新股(天)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={365}
-                value={activeStrategy.filters.exclude_new_stock_days}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, exclude_new_stock_days: v || 60 } })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">最低市值(亿)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={10000}
-                value={activeStrategy.filters.min_market_cap}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, min_market_cap: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">最高市值(亿)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={100000}
-                value={activeStrategy.filters.max_market_cap}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, max_market_cap: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-                placeholder="0=不限"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">最低股价(元)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={1000}
-                step={0.5}
-                value={activeStrategy.filters.min_price}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, min_price: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">最低成交额(万)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={1000000}
-                step={1000}
-                value={activeStrategy.filters.min_amount}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, min_amount: v || 0 } })}
-                style={{ ...inputStyle, width: 100 }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">PE 上限</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={1000}
-                value={activeStrategy.filters.pe_max}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, pe_max: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-                placeholder="0=不限"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">PE 下限</span>
-              <InputNumber
-                size="small"
-                min={-100}
-                max={100}
-                value={activeStrategy.filters.pe_min}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, pe_min: v ?? 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">PB 上限</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={100}
-                step={0.5}
-                value={activeStrategy.filters.pb_max}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, pb_max: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-                placeholder="0=不限"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-txt-primary">ROE 下限(%)</span>
-              <InputNumber
-                size="small"
-                min={0}
-                max={100}
-                step={1}
-                value={activeStrategy.filters.roe_min}
-                onChange={v => updateStrategy({ ...activeStrategy, filters: { ...activeStrategy.filters, roe_min: v || 0 } })}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* 日志导出 */}
       <section>

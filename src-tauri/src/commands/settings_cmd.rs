@@ -2,7 +2,6 @@ use tauri::{AppHandle, Manager, State};
 use crate::AppState;
 use crate::models::settings::AppSettings;
 use crate::models::ai::AIConfig;
-use crate::models::strategy::StrategyConfig;
 use crate::services::ai_service::AIService;
 
 #[tauri::command]
@@ -79,22 +78,6 @@ pub async fn set_active_ai_config(
     log::info!("[settings_cmd] set_active_ai_config id={}", config_id);
     let mut settings = state.db.load_settings().map_err(|e| e.to_string())?;
     settings.active_ai_config_id = Some(config_id);
-    state.db.save_settings(&settings).map_err(|e| e.to_string())?;
-    Ok(settings)
-}
-
-#[tauri::command]
-pub async fn update_strategy_config(
-    state: State<'_, AppState>,
-    strategy: StrategyConfig,
-) -> Result<AppSettings, String> {
-    log::info!("[settings_cmd] update_strategy_config id={}", strategy.id);
-    let mut settings = state.db.load_settings().map_err(|e| e.to_string())?;
-    if let Some(existing) = settings.strategies.iter_mut().find(|s| s.id == strategy.id) {
-        *existing = strategy;
-    } else {
-        settings.strategies.push(strategy);
-    }
     state.db.save_settings(&settings).map_err(|e| e.to_string())?;
     Ok(settings)
 }

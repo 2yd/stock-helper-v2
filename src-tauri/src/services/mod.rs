@@ -1,6 +1,4 @@
 pub mod stock_data;
-pub mod scoring;
-pub mod labeling;
 pub mod ai_service;
 pub mod scheduler;
 pub mod market_pool;
@@ -10,4 +8,3 @@ pub mod history_kline;
 pub mod technical_indicators;
 pub mod stock_tools;
 pub mod news_service;
-pub mod thematic_scoring;
