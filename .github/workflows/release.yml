@@ -6,7 +6,35 @@ on:
       - 'v*'
 
 jobs:
-  release:
+  # 第一步：先创建一个 draft release，避免并发 job 各自创建
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create draft release
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'Stock Helper ${{ github.ref_name }}'
+          body: |
+            A股量化选股助手 ${{ github.ref_name }}
+
+            ### 下载说明
+            - **macOS (Apple Silicon)**: 下载 `_aarch64.dmg` 文件
+            - **macOS (Intel)**: 下载 `_x64.dmg` 文件
+            - **Windows**: 下载 `.msi` 或 `.exe` 安装包
+          draft: true
+          prerelease: false
+
+  # 第二步：各平台并发构建，上传到已有的 release
+  build:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -44,7 +72,6 @@ jobs:
           VERSION=${{ steps.get_version.outputs.VERSION }}
           sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
           rm -f src-tauri/Cargo.toml.bak
-          # 同步 tauri.conf.json 版本号
           sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
           rm -f src-tauri/tauri.conf.json.bak
         shell: bash
@@ -52,20 +79,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and release
+      - name: Build and upload
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Stock Helper ${{ github.ref_name }}'
-          releaseBody: |
-            A股量化选股助手 ${{ github.ref_name }}
-
-            ### 下载说明
-            - **macOS (Apple Silicon)**: 下载 `_aarch64.dmg` 文件
-            - **macOS (Intel)**: 下载 `_x64.dmg` 文件
-            - **Windows**: 下载 `.msi` 或 `.exe` 安装包
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
