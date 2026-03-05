@@ -6,17 +6,31 @@ on:
       - 'v*'
 
 jobs:
-  # 第一步：先创建一个 draft release，避免并发 job 各自创建
+  # 第一步：先创建 release，避免并发 job 各自创建
   create-release:
     permissions:
       contents: write
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create.outputs.id }}
+      is_prerelease: ${{ steps.check.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create draft release
+      - name: Check if prerelease
+        id: check
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == *"-"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Detected prerelease tag: $TAG"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Detected stable tag: $TAG"
+          fi
+        shell: bash
+
+      - name: Create release
         id: create
         uses: softprops/action-gh-release@v2
         with:
@@ -29,8 +43,8 @@ jobs:
             - **macOS (Apple Silicon)**: 下载 `_aarch64.dmg` 文件
             - **macOS (Intel)**: 下载 `_x64.dmg` 文件
             - **Windows**: 下载 `.msi` 或 `.exe` 安装包
-          draft: true
-          prerelease: false
+          draft: ${{ steps.check.outputs.is_prerelease == 'false' }}
+          prerelease: ${{ steps.check.outputs.is_prerelease == 'true' }}
 
   # 第二步：各平台并发构建，上传到已有的 release
   build:
