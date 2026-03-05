@@ -6,47 +6,62 @@ on:
       - 'v*'
 
 jobs:
-  # 第一步：先创建 release，避免并发 job 各自创建
   create-release:
     permissions:
       contents: write
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create.outputs.id }}
-      is_prerelease: ${{ steps.check.outputs.is_prerelease }}
+      release_id: ${{ steps.create.outputs.release_id }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+        shell: bash
 
       - name: Check if prerelease
         id: check
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          if [[ "$TAG" == *"-"* ]]; then
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" == *"-"* ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "Detected prerelease tag: $TAG"
           else
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "Detected stable tag: $TAG"
           fi
         shell: bash
 
       - name: Create release
         id: create
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: 'Stock Helper ${{ github.ref_name }}'
-          body: |
-            A股量化选股助手 ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IS_PRE="${{ steps.check.outputs.is_prerelease }}"
+          DRAFT=$( [ "$IS_PRE" = "true" ] && echo "false" || echo "true" )
+          PRE=$( [ "$IS_PRE" = "true" ] && echo "true" || echo "false" )
 
-            ### 下载说明
-            - **macOS (Apple Silicon)**: 下载 `_aarch64.dmg` 文件
-            - **macOS (Intel)**: 下载 `_x64.dmg` 文件
-            - **Windows**: 下载 `.msi` 或 `.exe` 安装包
-          draft: ${{ steps.check.outputs.is_prerelease == 'false' }}
-          prerelease: ${{ steps.check.outputs.is_prerelease == 'true' }}
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            -f name="Stock Helper v${VERSION}" \
+            -f body="A股量化选股助手 v${VERSION}
 
-  # 第二步：各平台并发构建，上传到已有的 release
+          ### 下载说明
+          - **macOS (Apple Silicon)**: 下载 \`_aarch64.dmg\` 文件
+          - **macOS (Intel)**: 下载 \`_x64.dmg\` 文件
+          - **Windows**: 下载 \`.msi\` 或 \`.exe\` 安装包" \
+            -F draft="$DRAFT" \
+            -F prerelease="$PRE" \
+            --jq '.id')
+
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "Created release ID: $RELEASE_ID"
+        shell: bash
+
   build:
     needs: create-release
     permissions:
@@ -76,22 +91,14 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Get version from tag
-        id: get_version
-        run: |
-          FULL_VERSION="${GITHUB_REF_NAME#v}"
-          # 去掉预发布后缀（如 0.1.5-beta.1 → 0.1.5），MSI 只支持纯数字版本
-          BASE_VERSION="${FULL_VERSION%%-*}"
-          echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
-          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_OUTPUT
-        shell: bash
-
       - name: Sync versions
         run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
-          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          VERSION="${{ needs.create-release.outputs.version }}"
+          # 去掉预发布后缀，MSI 只支持纯数字版本
+          BASE_VERSION="${VERSION%%-*}"
+          sed -i.bak "s/^version = \".*\"/version = \"$BASE_VERSION\"/" src-tauri/Cargo.toml
           rm -f src-tauri/Cargo.toml.bak
-          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$BASE_VERSION\"/" src-tauri/tauri.conf.json
           rm -f src-tauri/tauri.conf.json.bak
         shell: bash
 
