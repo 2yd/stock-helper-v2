@@ -78,7 +78,12 @@ jobs:
 
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          FULL_VERSION="${GITHUB_REF_NAME#v}"
+          # 去掉预发布后缀（如 0.1.5-beta.1 → 0.1.5），MSI 只支持纯数字版本
+          BASE_VERSION="${FULL_VERSION%%-*}"
+          echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Sync versions
