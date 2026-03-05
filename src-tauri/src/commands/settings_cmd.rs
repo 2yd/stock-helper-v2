@@ -111,46 +111,41 @@ pub async fn test_ai_config(
     })
 }
 
-/// 检查版本更新：通过 GitHub Releases API 获取最新版本，与当前版本对比
+/// 检查版本更新：通过 GitHub redirect 机制获取最新 release 版本号，再按需拉详情
 #[tauri::command]
 pub async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     log::info!("[settings_cmd] check_update");
 
-    // 从 tauri.conf.json 读取当前版本
     let current_version = app.config().version.clone().unwrap_or_default();
     log::info!("[settings_cmd] current_version={}", current_version);
 
-    // 调用 GitHub API 获取最新 release
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none()) // 不跟随重定向
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
+    // 第一步：HEAD 请求 latest release 页面，从 302 Location 中提取版本号
+    // 这不走 API 速率限制
     let resp = client
-        .get("https://api.github.com/repos/2yd/stock-helper-v2/releases/latest")
+        .head("https://github.com/2yd/stock-helper-v2/releases/latest")
         .header("User-Agent", "StockHelper")
-        .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
-        .map_err(|e| format!("请求 GitHub API 失败: {}", e))?;
+        .map_err(|e| format!("检查更新失败: {}", e))?;
 
-    if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        log::info!("[settings_cmd] check_update: no releases found");
-        return Ok(None);
-    }
+    let location = match resp.headers().get("location") {
+        Some(loc) => loc.to_str().unwrap_or("").to_string(),
+        None => {
+            log::info!("[settings_cmd] check_update: no releases found (no redirect)");
+            return Ok(None);
+        }
+    };
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        return Err(format!("GitHub API 返回错误: {}", status));
-    }
-
-    let release: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 GitHub API 响应失败: {}", e))?;
-
-    let tag_name = release["tag_name"]
-        .as_str()
+    // Location 格式: https://github.com/2yd/stock-helper-v2/releases/tag/v0.1.4
+    let tag_name = location
+        .rsplit('/')
+        .next()
         .unwrap_or("")
         .trim_start_matches('v')
         .to_string();
@@ -160,8 +155,7 @@ pub async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, S
     }
 
     // 比较版本号
-    let is_newer = compare_versions(&tag_name, &current_version);
-    if !is_newer {
+    if !compare_versions(&tag_name, &current_version) {
         log::info!(
             "[settings_cmd] check_update: current={} latest={}, no update",
             current_version,
@@ -176,13 +170,50 @@ pub async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, S
         tag_name
     );
 
-    // 构建更新信息
+    // 第二步：有新版本时才调用 API 获取详情（release notes 等）
+    let release_url = format!(
+        "https://api.github.com/repos/2yd/stock-helper-v2/releases/tags/v{}",
+        tag_name
+    );
+
+    let api_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let detail = api_client
+        .get(&release_url)
+        .header("User-Agent", "StockHelper")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await;
+
+    let (body, published_at) = match detail {
+        Ok(resp) if resp.status().is_success() => {
+            let release: serde_json::Value = resp.json().await.unwrap_or_default();
+            (
+                release["body"].as_str().unwrap_or("").to_string(),
+                release["published_at"].as_str().unwrap_or("").to_string(),
+            )
+        }
+        _ => {
+            // API 获取详情失败不影响主流程，只是没有 release notes
+            log::warn!("[settings_cmd] check_update: failed to fetch release details, proceeding without notes");
+            (String::new(), String::new())
+        }
+    };
+
+    let html_url = format!(
+        "https://github.com/2yd/stock-helper-v2/releases/tag/v{}",
+        tag_name
+    );
+
     let update_info = serde_json::json!({
         "version": tag_name,
         "current_version": current_version,
-        "body": release["body"].as_str().unwrap_or(""),
-        "published_at": release["published_at"].as_str().unwrap_or(""),
-        "html_url": release["html_url"].as_str().unwrap_or(""),
+        "body": body,
+        "published_at": published_at,
+        "html_url": html_url,
     });
 
     Ok(Some(update_info))

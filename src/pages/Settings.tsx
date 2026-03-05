@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Slider, Switch, Select, Input, InputNumber, App, Modal } from 'antd';
+import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
 import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown, RefreshCw, Info } from 'lucide-react';
-import { open } from '@tauri-apps/plugin-shell';
 import { getVersion } from '@tauri-apps/api/app';
 import { safeInvoke as invoke, isTauri } from '../hooks/useTauri';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AIConfig } from '../types';
-import logger from '../utils/logger';
+import UpdateModal from '../components/UpdateModal';
+import type { UpdateInfo } from '../components/UpdateModal';
 
 export default function Settings() {
   const { message } = App.useApp();
@@ -15,6 +15,7 @@ export default function Settings() {
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [appVersion, setAppVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -578,40 +579,9 @@ export default function Settings() {
               onClick={async () => {
                 setCheckingUpdate(true);
                 try {
-                  const result = await invoke<{ version: string; current_version: string; body: string; published_at: string; html_url: string } | null>('check_update');
+                  const result = await invoke<UpdateInfo | null>('check_update');
                   if (result) {
-                    const publishDate = result.published_at
-                      ? new Date(result.published_at).toLocaleDateString('zh-CN')
-                      : '';
-                    Modal.confirm({
-                      title: `发现新版本 v${result.version}`,
-                      width: 520,
-                      icon: null,
-                      content: (
-                        <div className="mt-2 space-y-3">
-                          <div className="flex items-center gap-4 text-sm text-txt-muted">
-                            <span>当前版本: v{result.current_version}</span>
-                            {publishDate && <span>发布日期: {publishDate}</span>}
-                          </div>
-                          {result.body && (
-                            <div className="max-h-60 overflow-y-auto p-3 rounded-lg bg-bg-elevated border border-[#30363D]">
-                              <p className="text-xs text-txt-muted mb-1 font-medium">更新内容:</p>
-                              <pre className="text-sm text-txt-secondary whitespace-pre-wrap font-sans leading-relaxed">{result.body}</pre>
-                            </div>
-                          )}
-                          <p className="text-xs text-txt-muted">下载后直接安装即可，数据不会丢失。</p>
-                        </div>
-                      ),
-                      okText: '前往下载',
-                      cancelText: '稍后再说',
-                      onOk: () => {
-                        if (result.html_url) {
-                          open(result.html_url).catch((e: unknown) =>
-                            logger.error(`Failed to open release URL: ${e}`)
-                          );
-                        }
-                      },
-                    });
+                    setUpdateInfo(result);
                   } else {
                     message.success('已是最新版本');
                   }
@@ -635,6 +605,11 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      {/* 更新弹窗 */}
+      {updateInfo && (
+        <UpdateModal info={updateInfo} onClose={() => setUpdateInfo(null)} />
+      )}
     </div>
   );
 }
