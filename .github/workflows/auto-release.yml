@@ -1,12 +1,12 @@
 name: Auto Release
 
-# 当代码合并到 master 分支时触发
+# 代码 push 到主干时触发（PR 合并或直接 push 均可）
 on:
   push:
     branches:
       - master
     paths:
-      - 'src-tauri/tauri.conf.json'
+      - 'package.json'
 
 jobs:
   auto-tag:
@@ -16,12 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 需要完整历史来检查已有 tag
+          fetch-depth: 0
 
-      - name: Get version from tauri.conf.json
+      - name: Get version from package.json
         id: version
         run: |
-          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+          VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Detected version: $VERSION"
         shell: bash
