@@ -83,4 +83,4 @@ cargo = cargo.replace(
 writeFileSync(cargoPath, cargo);
 console.log(`  ✅ src-tauri/Cargo.toml${cargoVersion !== newVersion ? ` (${cargoVersion})` : ''}`);
 
-console.log(`\n🎉 完成! 记得提交后合并到 main 即可自动发布。\n`);
+console.log(`\n🎉 完成! 记得提交后合并到 master 即可自动发布。\n`);
