@@ -82,7 +82,7 @@ export default function Settings() {
         <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card space-y-3">
           <div>
             <label className="text-xs text-txt-muted block mb-1">
-              qgqp_b_id（智能选股必需）
+              qgqp_b_id（AI选股工具必需）
             </label>
             <Input
               value={settings.qgqp_b_id || ''}

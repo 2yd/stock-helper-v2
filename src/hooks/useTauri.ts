@@ -37,10 +37,6 @@ function getMockData(cmd: string): unknown {
         agent_prompts: [],
         active_pick_prompt_id: null,
       };
-    case 'get_hot_strategies':
-      return [];
-    case 'smart_search_stock':
-      return { code: -1, message: '非 Tauri 环境' };
     case 'search_stocks':
       return [];
     // Watchlist commands

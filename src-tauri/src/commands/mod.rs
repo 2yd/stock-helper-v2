@@ -2,7 +2,6 @@ pub mod stock_cmd;
 pub mod ai_cmd;
 pub mod settings_cmd;
 pub mod pool_cmd;
-pub mod smart_stock_cmd;
 pub mod watchlist_cmd;
 pub mod news_cmd;
 pub mod ai_pick_cmd;

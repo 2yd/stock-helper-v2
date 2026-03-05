@@ -61,22 +61,6 @@ export interface AIStreamEvent {
   tool_name?: string | null;
 }
 
-// Smart Stock types
-export interface SmartStockColumn {
-  key: string;
-  title: string;
-  unit?: string;
-  date_msg?: string;
-  hidden_need?: boolean;
-  children?: SmartStockColumn[];
-}
-
-export interface HotStrategyItem {
-  rank: number;
-  question: string;
-  chg?: number;
-}
-
 // ====== Watchlist Types ======
 
 export interface WatchlistStock {
