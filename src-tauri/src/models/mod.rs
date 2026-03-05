@@ -4,3 +4,4 @@ pub mod settings;
 pub mod watchlist;
 pub mod news;
 pub mod tracking;
+pub mod agent_prompt;

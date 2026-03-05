@@ -34,6 +34,8 @@ function getMockData(cmd: string): unknown {
         qgqp_b_id: '',
         max_pick_tool_rounds: 10,
         max_pick_token_budget: 100000,
+        agent_prompts: [],
+        active_pick_prompt_id: null,
       };
     case 'get_hot_strategies':
       return [];

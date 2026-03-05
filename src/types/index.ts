@@ -18,6 +18,16 @@ export interface AIConfig {
   enabled: boolean;
 }
 
+export interface AgentPrompt {
+  id: string;
+  name: string;
+  strategy_prompt: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+}
+
 export interface AppSettings {
   refresh_interval_secs: number;
   auto_refresh: boolean;
@@ -29,6 +39,8 @@ export interface AppSettings {
   qgqp_b_id: string;
   max_pick_tool_rounds: number;
   max_pick_token_budget: number;
+  agent_prompts: AgentPrompt[];
+  active_pick_prompt_id: string | null;
 }
 
 export interface AIAnalysisResult {

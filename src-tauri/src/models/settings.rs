@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use super::ai::AIConfig;
+use super::agent_prompt::AgentPrompt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
@@ -23,6 +24,10 @@ pub struct AppSettings {
     pub max_pick_tool_rounds: usize,
     #[serde(default = "default_max_pick_token_budget")]
     pub max_pick_token_budget: u32,
+    #[serde(default)]
+    pub agent_prompts: Vec<AgentPrompt>,
+    #[serde(default)]
+    pub active_pick_prompt_id: Option<String>,
 }
 
 fn default_refresh_interval() -> u64 { 30 }
@@ -43,6 +48,8 @@ impl Default for AppSettings {
             qgqp_b_id: String::new(),
             max_pick_tool_rounds: 10,
             max_pick_token_budget: 100_000,
+            agent_prompts: vec![],
+            active_pick_prompt_id: None,
         }
     }
 }

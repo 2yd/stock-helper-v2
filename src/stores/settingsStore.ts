@@ -14,6 +14,8 @@ const defaultSettings: AppSettings = {
   qgqp_b_id: '',
   max_pick_tool_rounds: 10,
   max_pick_token_budget: 100000,
+  agent_prompts: [],
+  active_pick_prompt_id: null,
 };
 
 interface SettingsStore {
@@ -99,8 +101,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     try {
       const result = await invoke<string>('test_ai_config', { config });
       return result;
-    } catch (e: unknown) {
-      throw e;
     } finally {
       set({ testingConfigId: null });
     }
@@ -111,8 +111,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     try {
       const result = await invoke<string>('export_logs');
       return result;
-    } catch (e: unknown) {
-      throw e;
     } finally {
       set({ exportingLogs: false });
     }
