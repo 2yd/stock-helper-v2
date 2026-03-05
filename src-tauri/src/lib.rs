@@ -119,6 +119,7 @@ pub fn run() {
             commands::tracking_cmd::clear_tracking_by_date,
             commands::tracking_cmd::analyze_loss_reasons,
             commands::settings_cmd::export_logs,
+            commands::settings_cmd::check_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Slider, Switch, Select, Input, InputNumber, App } from 'antd';
-import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown } from 'lucide-react';
+import { Plus, Trash2, Bot, Database, Sliders, Filter, Fingerprint, Loader2, CheckCircle, XCircle, Zap, FileDown, RefreshCw, Info } from 'lucide-react';
+import { getVersion } from '@tauri-apps/api/app';
+import { safeInvoke as invoke, isTauri } from '../hooks/useTauri';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AIConfig } from '../types';
+import UpdateModal from '../components/UpdateModal';
+import type { UpdateInfo } from '../components/UpdateModal';
 
 export default function Settings() {
   const { message } = App.useApp();
   const { settings, loadSettings, saveSettings, addAIConfig, removeAIConfig, updateAIConfig, setActiveAIConfig, updateStrategy, testAIConfig, testingConfigId, exportLogs, exportingLogs } = useSettingsStore();
 
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [appVersion, setAppVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
     loadSettings();
+    // 获取当前版本号
+    if (isTauri) {
+      getVersion().then(v => setAppVersion(v)).catch(() => setAppVersion('unknown'));
+    }
   }, []);
 
   if (!settings) {
@@ -550,6 +561,55 @@ export default function Settings() {
           </button>
         </div>
       </section>
+
+      {/* 关于 / 版本更新 */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <Info size={18} className="text-purple-400" />
+          <h2 className="text-base font-bold text-txt-primary">关于</h2>
+        </div>
+
+        <div className="p-4 rounded-lg border border-[#30363D] bg-bg-card space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-txt-primary">当前版本</span>
+              <span className="text-sm text-txt-muted ml-2 font-mono">v{appVersion || '...'}</span>
+            </div>
+            <button
+              onClick={async () => {
+                setCheckingUpdate(true);
+                try {
+                  const result = await invoke<UpdateInfo | null>('check_update');
+                  if (result) {
+                    setUpdateInfo(result);
+                  } else {
+                    message.success('已是最新版本');
+                  }
+                } catch (e: unknown) {
+                  const errMsg = e instanceof Error ? e.message : String(e);
+                  message.error(`检查更新失败: ${errMsg}`);
+                } finally {
+                  setCheckingUpdate(false);
+                }
+              }}
+              disabled={checkingUpdate}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {checkingUpdate ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              {checkingUpdate ? '检查中...' : '检查更新'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 更新弹窗 */}
+      {updateInfo && (
+        <UpdateModal info={updateInfo} onClose={() => setUpdateInfo(null)} />
+      )}
     </div>
   );
 }

@@ -1,18 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AIPick from './pages/AIPick';
 import Settings from './pages/Settings';
 import SmartStock from './pages/SmartStock';
 import Watchlist from './pages/Watchlist';
 import NewsCenter from './pages/NewsCenter';
+import UpdateModal from './components/UpdateModal';
+import type { UpdateInfo } from './components/UpdateModal';
+import { safeInvoke as invoke } from './hooks/useTauri';
+import logger from './utils/logger';
 import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Search, Brain, Eye, Newspaper } from 'lucide-react';
 
 type Page = 'board' | 'settings' | 'smart' | 'watchlist' | 'news';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('smart');
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+
+  // 启动时静默检查更新
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const result = await invoke<UpdateInfo | null>('check_update');
+        if (result) {
+          setUpdateInfo(result);
+        }
+      } catch (e) {
+        logger.info(`Auto update check failed (non-critical): ${e}`);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="w-full h-full flex flex-col bg-bg-base">
+      {/* 更新弹窗 */}
+      {updateInfo && (
+        <UpdateModal info={updateInfo} onClose={() => setUpdateInfo(null)} />
+      )}
+
       {/* Top Navigation Bar */}
       <header className="h-12 flex items-center px-4 border-b border-[#30363D] bg-bg-card flex-shrink-0">
         <div className="flex items-center gap-2">
