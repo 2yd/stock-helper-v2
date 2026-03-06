@@ -6,3 +6,4 @@ pub mod watchlist_cmd;
 pub mod news_cmd;
 pub mod ai_pick_cmd;
 pub mod tracking_cmd;
+pub mod market_cmd;

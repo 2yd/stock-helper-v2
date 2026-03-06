@@ -98,6 +98,8 @@ pub fn run() {
             commands::tracking_cmd::analyze_loss_reasons,
             commands::settings_cmd::export_logs,
             commands::settings_cmd::check_update,
+            commands::market_cmd::get_market_overview,
+            commands::market_cmd::generate_market_comment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

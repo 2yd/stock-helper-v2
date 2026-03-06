@@ -941,7 +941,7 @@ async fn get_economic_data(indicator: &str) -> Result<String> {
 }
 
 /// 获取全球主要股票指数
-async fn get_global_indexes() -> Result<String> {
+pub async fn get_global_indexes() -> Result<String> {
     let client = http::build_qq_finance_client()?;
     let url = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/rank/indexRankDetail2";
 

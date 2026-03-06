@@ -104,6 +104,13 @@ export default function Settings() {
         <div className="flex items-center gap-2 mb-4">
           <Bot size={18} className="text-primary-gold" />
           <h2 className="text-base font-bold text-txt-primary">AI 模型配置</h2>
+          <div className="relative group">
+            <Info size={14} className="text-amber-400 cursor-help" />
+            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 rounded-lg bg-[#1C2128] border border-[#30363D] shadow-lg text-xs text-txt-secondary w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50">
+              <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 rotate-45 bg-[#1C2128] border-l border-t border-[#30363D]" />
+              推荐使用非思考模型（如 <span className="text-amber-400 font-medium">deepseek-chat</span>），思考模型会消耗大量 Token 且可能产生意料之外的 bug～
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4">
@@ -119,7 +126,7 @@ export default function Settings() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <input
-                    className="bg-transparent border-none text-txt-primary font-semibold text-sm outline-none w-32"
+                    className="bg-transparent border-none text-txt-primary font-semibold text-sm outline-none w-16"
                     value={config.name}
                     onChange={e => updateAIConfig({ ...config, name: e.target.value })}
                   />

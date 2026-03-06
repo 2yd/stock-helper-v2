@@ -8,3 +8,4 @@ pub mod history_kline;
 pub mod technical_indicators;
 pub mod stock_tools;
 pub mod news_service;
+pub mod market_overview;

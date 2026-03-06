@@ -243,3 +243,64 @@ export interface AIPickResult {
   analysis_summary: string;
   timestamp: string;
 }
+
+// ========== 大盘概览 ==========
+
+export interface MarketOverview {
+  market_status: string;
+  indexes: IndexQuote[];
+  market_stats: MarketStats;
+  sentiment: SentimentInfo;
+  sector_top: SectorInfo[];
+  sector_bottom: SectorInfo[];
+  global_indexes: GlobalIndex[];
+  total_amount: number;
+  volume_compare: VolumeCompare;
+  update_time: string;
+}
+
+export interface IndexQuote {
+  name: string;
+  code: string;
+  price: number;
+  change_pct: number;
+  change_amount: number;
+  amount: number;
+  open: number;
+  high: number;
+  low: number;
+  pre_close: number;
+}
+
+export interface MarketStats {
+  rise_count: number;
+  fall_count: number;
+  flat_count: number;
+}
+
+export interface SentimentInfo {
+  score: number;
+  level: string;
+  money_effect: number;
+}
+
+export interface SectorInfo {
+  name: string;
+  change_pct: number;
+  lead_stock: string;
+}
+
+export interface VolumeCompare {
+  today_amount: number;
+  yesterday_amount: number;
+  diff: number;
+  ratio: number;
+}
+
+export interface GlobalIndex {
+  name: string;
+  code: string;
+  price: string;
+  change_pct: string;
+  region: string;
+}
