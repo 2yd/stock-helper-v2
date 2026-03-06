@@ -30,52 +30,13 @@ function getMockData(cmd: string): unknown {
         data_source_primary: 'sina',
         ai_configs: [],
         active_ai_config_id: null,
-        strategies: [
-          {
-            id: 'default',
-            name: '多因子综合选股',
-            description: '基于价值、质量、动量、资金、风险五大维度的量化选股策略',
-            watch_codes: [],
-            weights: {
-              value: 15,
-              quality: 15,
-              momentum: 30,
-              capital: 25,
-              risk: 15,
-            },
-            filters: {
-              exclude_st: true,
-              exclude_new_stock_days: 60,
-              min_market_cap: 30,
-              max_market_cap: 0,
-              min_price: 3,
-              min_amount: 5000,
-              pe_max: 100,
-              pe_min: 0,
-              pb_max: 20,
-              roe_min: 5,
-            },
-            enabled: true,
-            top_n: 50,
-          },
-        ],
-        active_strategy_id: 'default',
         token_usage_today: 0,
         qgqp_b_id: '',
+        max_pick_tool_rounds: 10,
+        max_pick_token_budget: 100000,
+        agent_prompts: [],
+        active_pick_prompt_id: null,
       };
-    case 'get_market_status':
-      return '休市';
-    case 'get_today_token_usage':
-      return 0;
-    case 'scan_market':
-    case 'refresh_strategy':
-      return [];
-    case 'get_market_stock_count':
-      return 0;
-    case 'get_hot_strategies':
-      return [];
-    case 'smart_search_stock':
-      return { code: -1, message: '非 Tauri 环境' };
     case 'search_stocks':
       return [];
     // Watchlist commands
@@ -136,6 +97,44 @@ function getMockData(cmd: string): unknown {
       return null;
     case 'test_ai_config':
       return '模型连接正常（Mock 环境）';
+    case 'get_market_overview':
+      return {
+        market_status: '已收盘',
+        indexes: [
+          { name: '上证指数', code: 'sh000001', price: 3402.86, change_pct: 0.83, change_amount: 27.99, amount: 512300000000, open: 3380.0, high: 3415.0, low: 3375.0, pre_close: 3374.87 },
+          { name: '深证成指', code: 'sz399001', price: 10352.00, change_pct: 0.62, change_amount: 63.92, amount: 623400000000, open: 10300.0, high: 10400.0, low: 10280.0, pre_close: 10288.08 },
+          { name: '创业板指', code: 'sz399006', price: 2082.53, change_pct: -0.25, change_amount: -5.18, amount: 198500000000, open: 2090.0, high: 2095.0, low: 2075.0, pre_close: 2087.71 },
+        ],
+        market_stats: { rise_count: 2856, fall_count: 2103, flat_count: 341 },
+        sentiment: { score: 58.5, level: '中性', money_effect: 53.8 },
+        sector_top: [
+          { name: '船舶制造', change_pct: 4.52, lead_stock: '中国船舶' },
+          { name: '航天航空', change_pct: 3.18, lead_stock: '航发动力' },
+          { name: '半导体', change_pct: 2.76, lead_stock: '北方华创' },
+          { name: '光伏设备', change_pct: 2.31, lead_stock: '隆基绿能' },
+          { name: '新能源车', change_pct: 1.95, lead_stock: '比亚迪' },
+        ],
+        sector_bottom: [
+          { name: '房地产', change_pct: -2.41, lead_stock: '万科A' },
+          { name: '酿酒行业', change_pct: -1.87, lead_stock: '贵州茅台' },
+          { name: '保险', change_pct: -1.52, lead_stock: '中国平安' },
+          { name: '银行', change_pct: -1.08, lead_stock: '招商银行' },
+          { name: '医药商业', change_pct: -0.93, lead_stock: '国药股份' },
+        ],
+        global_indexes: [
+          { name: '道琼斯', code: 'DJIA', price: '43221.55', change_pct: '0.32%', region: 'america' },
+          { name: '纳斯达克', code: 'IXIC', price: '18925.74', change_pct: '-0.18%', region: 'america' },
+          { name: '恒生指数', code: 'HSI', price: '22652.14', change_pct: '1.24%', region: 'asia' },
+          { name: '日经225', code: 'N225', price: '38451.46', change_pct: '-0.45%', region: 'asia' },
+          { name: '英国富时100', code: 'FTSE', price: '8421.70', change_pct: '0.56%', region: 'europe' },
+          { name: '德国DAX30', code: 'GDAXI', price: '21108.42', change_pct: '0.78%', region: 'europe' },
+        ],
+        total_amount: 1334200000000,
+        volume_compare: { today_amount: 1334200000000, yesterday_amount: 1198700000000, diff: 135500000000, ratio: 1.113 },
+        update_time: '15:01:23',
+      };
+    case 'generate_market_comment':
+      return '今日市场震荡走高，上证指数收涨0.83%站上3400点。两市成交额1.33万亿，较昨日放量11.3%，赚钱效应尚可。船舶制造、航天航空板块领涨，市场情绪偏中性。';
     default:
       return null;
   }

@@ -1,51 +1,7 @@
-export interface StrategyResultRow {
-  code: string;
-  name: string;
-  price: number;
-  change_pct: number;
-  pe_ttm: number;
-  pb: number;
-  roe: number;
-  revenue_yoy: number;
-  profit_yoy: number;
-  total_market_cap: number;  // 亿元
-  float_market_cap: number;  // 亿元
-  turnover_rate: number;     // %
-  volume_ratio: number;
-  amount: number;            // 万元
-  main_net_inflow: number;   // 万元
-  main_net_pct: number;      // %
-  pct_5d: number;            // %
-  pct_20d: number;           // %
-  pct_60d: number;           // %
-  score: number;             // 0-100
-  score_detail: FactorScoreDetail;
-  sentiment_score: number;   // 消息面得分 0-1
-  news_heat: number;         // 消息热度
-  matched_themes: string[];  // 匹配的主题
-  labels: StockLabel[];
-  instruction: AIInstruction | null;
-}
-
-export interface FactorScoreDetail {
-  value_score: number;    // 0-1
-  quality_score: number;
-  momentum_score: number;
-  capital_score: number;
-  risk_score: number;
-  sentiment_score: number;
-}
-
 export interface StockLabel {
   text: string;
   color: string;
   icon: string | null;
-}
-
-export interface AIInstruction {
-  action: 'buy' | 'watch' | 'eliminate';
-  label: string;
-  reason: string;
 }
 
 export interface AIConfig {
@@ -62,37 +18,14 @@ export interface AIConfig {
   enabled: boolean;
 }
 
-export interface FactorWeights {
-  value: number;
-  quality: number;
-  momentum: number;
-  capital: number;
-  risk: number;
-  sentiment: number;
-}
-
-export interface StockFilters {
-  exclude_st: boolean;
-  exclude_new_stock_days: number;
-  min_market_cap: number;
-  max_market_cap: number;
-  min_price: number;
-  min_amount: number;
-  pe_max: number;
-  pe_min: number;
-  pb_max: number;
-  roe_min: number;
-}
-
-export interface StrategyConfig {
+export interface AgentPrompt {
   id: string;
   name: string;
-  description: string;
-  weights: FactorWeights;
-  filters: StockFilters;
-  enabled: boolean;
-  top_n: number;
-  watch_codes: string[];
+  strategy_prompt: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+  description?: string;
 }
 
 export interface AppSettings {
@@ -102,12 +35,12 @@ export interface AppSettings {
   data_source_primary: 'sina' | 'tencent';
   ai_configs: AIConfig[];
   active_ai_config_id: string | null;
-  strategies: StrategyConfig[];
-  active_strategy_id: string;
   token_usage_today: number;
   qgqp_b_id: string;
   max_pick_tool_rounds: number;
   max_pick_token_budget: number;
+  agent_prompts: AgentPrompt[];
+  active_pick_prompt_id: string | null;
 }
 
 export interface AIAnalysisResult {
@@ -126,22 +59,6 @@ export interface AIStreamEvent {
   done: boolean;
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
   tool_name?: string | null;
-}
-
-// Smart Stock types
-export interface SmartStockColumn {
-  key: string;
-  title: string;
-  unit?: string;
-  date_msg?: string;
-  hidden_need?: boolean;
-  children?: SmartStockColumn[];
-}
-
-export interface HotStrategyItem {
-  rank: number;
-  question: string;
-  chg?: number;
 }
 
 // ====== Watchlist Types ======
@@ -325,4 +242,65 @@ export interface AIPickResult {
   recommendations: AIPickRecommendation[];
   analysis_summary: string;
   timestamp: string;
+}
+
+// ========== 大盘概览 ==========
+
+export interface MarketOverview {
+  market_status: string;
+  indexes: IndexQuote[];
+  market_stats: MarketStats;
+  sentiment: SentimentInfo;
+  sector_top: SectorInfo[];
+  sector_bottom: SectorInfo[];
+  global_indexes: GlobalIndex[];
+  total_amount: number;
+  volume_compare: VolumeCompare;
+  update_time: string;
+}
+
+export interface IndexQuote {
+  name: string;
+  code: string;
+  price: number;
+  change_pct: number;
+  change_amount: number;
+  amount: number;
+  open: number;
+  high: number;
+  low: number;
+  pre_close: number;
+}
+
+export interface MarketStats {
+  rise_count: number;
+  fall_count: number;
+  flat_count: number;
+}
+
+export interface SentimentInfo {
+  score: number;
+  level: string;
+  money_effect: number;
+}
+
+export interface SectorInfo {
+  name: string;
+  change_pct: number;
+  lead_stock: string;
+}
+
+export interface VolumeCompare {
+  today_amount: number;
+  yesterday_amount: number;
+  diff: number;
+  ratio: number;
+}
+
+export interface GlobalIndex {
+  name: string;
+  code: string;
+  price: string;
+  change_pct: string;
+  region: string;
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { safeInvoke as invoke } from '../hooks/useTauri';
-import { AppSettings, AIConfig, StrategyConfig } from '../types';
+import { AppSettings, AIConfig } from '../types';
 import logger from '../utils/logger';
 
 const defaultSettings: AppSettings = {
@@ -10,27 +10,12 @@ const defaultSettings: AppSettings = {
   data_source_primary: 'sina',
   ai_configs: [],
   active_ai_config_id: null,
-  strategies: [
-    {
-      id: 'default',
-      name: '多因子综合选股',
-      description: '基于价值、质量、动量、资金、风险、消息六大维度的AI量化选股策略',
-      watch_codes: [],
-      weights: { value: 15, quality: 15, momentum: 25, capital: 20, risk: 10, sentiment: 15 },
-      filters: {
-        exclude_st: true, exclude_new_stock_days: 60,
-        min_market_cap: 30, max_market_cap: 0, min_price: 3, min_amount: 5000,
-        pe_max: 100, pe_min: 0, pb_max: 20, roe_min: 5,
-      },
-      enabled: true,
-      top_n: 50,
-    },
-  ],
-  active_strategy_id: 'default',
   token_usage_today: 0,
   qgqp_b_id: '',
   max_pick_tool_rounds: 10,
   max_pick_token_budget: 100000,
+  agent_prompts: [],
+  active_pick_prompt_id: null,
 };
 
 interface SettingsStore {
@@ -45,7 +30,6 @@ interface SettingsStore {
   removeAIConfig: (configId: string) => Promise<void>;
   updateAIConfig: (config: AIConfig) => Promise<void>;
   setActiveAIConfig: (configId: string) => Promise<void>;
-  updateStrategy: (strategy: StrategyConfig) => Promise<void>;
   testAIConfig: (config: AIConfig) => Promise<string>;
   exportLogs: () => Promise<string>;
 }
@@ -112,22 +96,11 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     }
   },
 
-  updateStrategy: async (strategy: StrategyConfig) => {
-    try {
-      const settings = await invoke<AppSettings>('update_strategy_config', { strategy });
-      set({ settings });
-    } catch (e) {
-      logger.error(`Failed to update strategy: ${e}`);
-    }
-  },
-
   testAIConfig: async (config: AIConfig) => {
     set({ testingConfigId: config.id });
     try {
       const result = await invoke<string>('test_ai_config', { config });
       return result;
-    } catch (e: unknown) {
-      throw e;
     } finally {
       set({ testingConfigId: null });
     }
@@ -138,8 +111,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     try {
       const result = await invoke<string>('export_logs');
       return result;
-    } catch (e: unknown) {
-      throw e;
     } finally {
       set({ exportingLogs: false });
     }

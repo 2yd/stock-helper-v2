@@ -477,7 +477,6 @@ export default function Watchlist() {
             </div>
           ) : (
             <StockTable
-              mode="watchlist"
               data={trackingTableData}
               loading={useTrackingStore.getState().quotesLoading && trackingTableData.length === 0}
               onRowClick={(code) => {
@@ -507,7 +506,6 @@ export default function Watchlist() {
             </div>
           ) : (
             <StockTable
-              mode="watchlist"
               data={tableData}
               loading={quotesLoading && tableData.length === 0}
               onRowClick={handleStockClick}

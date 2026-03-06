@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 use crate::models::ai::AIStreamEvent;
+use crate::models::agent_prompt::BUILTIN_DEFAULT_PROMPT_ID;
 use crate::services::ai_service::AIService;
 
 /// AI 自主选股命令
@@ -43,6 +44,15 @@ pub async fn ai_pick_stocks(
     let max_tool_rounds = settings.max_pick_tool_rounds;
     let max_token_budget = settings.max_pick_token_budget;
 
+    // 读取用户自定义策略提示词
+    let custom_strategy = settings.active_pick_prompt_id
+        .as_ref()
+        .filter(|id| id.as_str() != BUILTIN_DEFAULT_PROMPT_ID)
+        .and_then(|id| {
+            settings.agent_prompts.iter().find(|p| &p.id == id)
+        })
+        .map(|p| p.strategy_prompt.clone());
+
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<AIStreamEvent>(100);
 
     let app_clone = app.clone();
@@ -54,7 +64,7 @@ pub async fn ai_pick_stocks(
 
     let app_for_db = app.clone();
     tokio::spawn(async move {
-        let result = AIService::ai_pick_stocks_with_tools(&config, &qgqp_b_id, sender.clone(), cancel_token, max_tool_rounds, max_token_budget).await;
+        let result = AIService::ai_pick_stocks_with_tools(&config, &qgqp_b_id, sender.clone(), cancel_token, max_tool_rounds, max_token_budget, custom_strategy.as_deref()).await;
 
         // 无论成功或失败，都重置标志位
         let app_state = app_for_db.state::<AppState>();

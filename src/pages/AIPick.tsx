@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare, Eye, Square } from 'lucide-react';
+import { Sparkles, ArrowLeft, Activity, Loader2, Check, RefreshCw, Brain, Zap, ChevronRight, ChevronDown, ChevronUp, Star, TrendingUp, X, Search, Users, MessageSquare, Eye, Square, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import KlineChart from '../components/KlineChart';
 import TechnicalPanel from '../components/TechnicalPanel';
 import WatchlistDiagnosePanel from '../components/WatchlistDiagnosePanel';
+import AgentPromptModal from '../components/AgentPromptModal';
 import { useAIPickStore } from '../stores/aiPickStore';
 import { useWatchlistStore } from '../stores/watchlistStore';
 import { useTrackingStore } from '../stores/trackingStore';
+import { useAgentPromptStore } from '../stores/agentPromptStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { AIPickRecommendation } from '../types';
 import { safeInvoke as invoke } from '../hooks/useTauri';
 
@@ -33,6 +36,9 @@ export default function AIPick() {
     loadAnalysis, setPeriod, startDiagnosis, setShowDiagnosePanel, resetDiagnosis,
   } = useWatchlistStore();
 
+  const { prompts, activePromptId, setActivePrompt, openModal, loadPrompts } = useAgentPromptStore();
+  const [promptDropdownOpen, setPromptDropdownOpen] = useState(false);
+
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [activeIndicators, setActiveIndicators] = useState<string[]>(['MA']);
   const [selectedStock, setSelectedStock] = useState<AIPickRecommendation | null>(null);
@@ -42,10 +48,19 @@ export default function AIPick() {
 
   useEffect(() => {
     loadCachedPicks();
+    // 确保 settings 加载后同步 prompts
+    const initPrompts = async () => {
+      const settings = useSettingsStore.getState().settings;
+      if (!settings) {
+        await useSettingsStore.getState().loadSettings();
+      }
+      loadPrompts();
+    };
+    initPrompts();
     return () => {
       if (unlistenRef.current) unlistenRef.current();
     };
-  }, []);
+  }, [loadCachedPicks, loadPrompts]);
 
   useEffect(() => {
     if (contentRef.current && picking && autoScrollRef.current) {
@@ -176,6 +191,72 @@ export default function AIPick() {
                 {recommendations.length} 只推荐
               </span>
             )}
+
+            {/* Strategy Prompt Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setPromptDropdownOpen(!promptDropdownOpen)}
+                disabled={picking}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border transition-all cursor-pointer max-w-[180px] ${
+                  picking
+                    ? 'border-[#30363D] bg-[#161B22]/50 text-[#484F58] cursor-not-allowed'
+                    : 'border-[#30363D] bg-[#161B22] text-[#8B949E] hover:border-[#484F58] hover:text-[#E6EDF3]'
+                }`}
+              >
+                <span className="truncate">{prompts.find(p => p.id === activePromptId)?.name || '默认策略'}</span>
+                <ChevronDown size={11} className={`shrink-0 transition-transform ${promptDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {promptDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setPromptDropdownOpen(false)} />
+                  <div className="absolute top-full left-0 mt-1 w-[240px] z-50 rounded-lg border border-[#30363D] bg-[#161B22] shadow-xl shadow-black/40 overflow-hidden">
+                    {prompts.map((p) => {
+                      const subtitle = p.description
+                        || (p.is_builtin ? '多维度均衡分析，适合大多数场景' : (p.strategy_prompt ? p.strategy_prompt.replace(/^#.*\n/gm, '').trim().slice(0, 30) : ''));
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setActivePrompt(p.id);
+                            setPromptDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 transition-colors cursor-pointer ${
+                            activePromptId === p.id
+                              ? 'bg-[#1C2333]'
+                              : 'hover:bg-[#1C2333]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[11px] truncate flex-1 ${activePromptId === p.id ? 'text-[#22D3EE]' : 'text-[#E6EDF3]'}`}>{p.name}</span>
+                            {p.is_builtin && (
+                              <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-[#1C2333] text-[#484F58] border border-[#30363D]">
+                                默认
+                              </span>
+                            )}
+                          </div>
+                          {subtitle && (
+                            <p className="text-[10px] text-[#484F58] truncate mt-0.5">{subtitle}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                    <div className="border-t border-[#30363D]">
+                      <button
+                        onClick={() => {
+                          setPromptDropdownOpen(false);
+                          openModal();
+                        }}
+                        className="w-full text-left px-3 py-2 text-[11px] flex items-center gap-2 text-[#8B949E] hover:text-[#22D3EE] hover:bg-[#1C2333] transition-colors cursor-pointer"
+                      >
+                        <Settings size={11} />
+                        <span>管理策略</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="flex-1" />
             {tokenUsage && (
               <span className="text-[10px] text-txt-muted font-mono opacity-50">
@@ -296,6 +377,9 @@ export default function AIPick() {
           onStockClick={handleStockClick}
         />
       )}
+
+      {/* Agent Prompt Management Modal */}
+      <AgentPromptModal />
     </div>
   );
 }

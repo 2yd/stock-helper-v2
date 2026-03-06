@@ -1,6 +1,6 @@
 [package]
 name = "stock-helper"
-version = "0.1.5"
+version = "0.2.0"
 description = "A股量化选股助手 - AI赋能竞价选股系统"
 authors = ["you"]
 license = ""

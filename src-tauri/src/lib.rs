@@ -5,7 +5,6 @@ pub mod db;
 pub mod utils;
 
 use db::database::Database;
-use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::Manager;
@@ -13,7 +12,6 @@ use tauri_plugin_log::{Target, TargetKind, RotationStrategy, TimezoneStrategy};
 
 pub struct AppState {
     pub db: Database,
-    pub watch_codes: Mutex<Vec<String>>,
     pub ai_picking: AtomicBool,
     /// AI 选股取消信号：true 表示请求取消
     pub ai_pick_cancel: Arc<AtomicBool>,
@@ -47,16 +45,8 @@ pub fn run() {
             let database = Database::new(app_data_dir)
                 .expect("Failed to initialize database");
 
-            let settings = database.load_settings().unwrap_or_default();
-            let active_strategy = settings.strategies.iter()
-                .find(|s| s.id == settings.active_strategy_id)
-                .cloned()
-                .unwrap_or_default();
-            let saved_codes = active_strategy.watch_codes;
-
             app.manage(AppState {
                 db: database,
-                watch_codes: Mutex::new(saved_codes),
                 ai_picking: AtomicBool::new(false),
                 ai_pick_cancel: Arc::new(AtomicBool::new(false)),
             });
@@ -70,14 +60,6 @@ pub fn run() {
             commands::stock_cmd::get_kline_data,
             commands::stock_cmd::search_stocks,
             commands::stock_cmd::get_watchlist_enriched,
-            commands::strategy_cmd::scan_market,
-            commands::strategy_cmd::refresh_strategy,
-            commands::strategy_cmd::generate_ai_instructions,
-            commands::strategy_cmd::get_market_status,
-            commands::strategy_cmd::is_trading_time,
-            commands::strategy_cmd::update_watch_codes,
-            commands::strategy_cmd::get_watch_codes,
-            commands::strategy_cmd::get_market_stock_count,
             commands::ai_cmd::analyze_stock,
             commands::ai_cmd::get_analysis_history,
             commands::ai_cmd::get_today_token_usage,
@@ -87,14 +69,10 @@ pub fn run() {
             commands::settings_cmd::remove_ai_config,
             commands::settings_cmd::update_ai_config,
             commands::settings_cmd::set_active_ai_config,
-            commands::settings_cmd::update_strategy_config,
             commands::settings_cmd::test_ai_config,
             commands::pool_cmd::fetch_limit_up_pool,
             commands::pool_cmd::fetch_streak_pool,
             commands::pool_cmd::fetch_and_apply_high_pool,
-            commands::smart_stock_cmd::smart_search_stock,
-            commands::smart_stock_cmd::get_hot_strategies,
-            commands::smart_stock_cmd::ai_smart_pick,
             commands::watchlist_cmd::add_watchlist_stock,
             commands::watchlist_cmd::remove_watchlist_stock,
             commands::watchlist_cmd::get_watchlist_stocks,
@@ -120,6 +98,8 @@ pub fn run() {
             commands::tracking_cmd::analyze_loss_reasons,
             commands::settings_cmd::export_logs,
             commands::settings_cmd::check_update,
+            commands::market_cmd::get_market_overview,
+            commands::market_cmd::generate_market_comment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

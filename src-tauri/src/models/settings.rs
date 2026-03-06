@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use super::ai::AIConfig;
-use super::strategy::StrategyConfig;
+use super::agent_prompt::AgentPrompt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
@@ -17,10 +17,6 @@ pub struct AppSettings {
     #[serde(default)]
     pub active_ai_config_id: Option<String>,
     #[serde(default)]
-    pub strategies: Vec<StrategyConfig>,
-    #[serde(default)]
-    pub active_strategy_id: String,
-    #[serde(default)]
     pub token_usage_today: u32,
     #[serde(default)]
     pub qgqp_b_id: String,
@@ -28,6 +24,10 @@ pub struct AppSettings {
     pub max_pick_tool_rounds: usize,
     #[serde(default = "default_max_pick_token_budget")]
     pub max_pick_token_budget: u32,
+    #[serde(default)]
+    pub agent_prompts: Vec<AgentPrompt>,
+    #[serde(default)]
+    pub active_pick_prompt_id: Option<String>,
 }
 
 fn default_refresh_interval() -> u64 { 30 }
@@ -37,8 +37,6 @@ fn default_max_pick_token_budget() -> u32 { 100_000 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        let default_strategy = StrategyConfig::default();
-        let strategy_id = default_strategy.id.clone();
         Self {
             refresh_interval_secs: 30,
             auto_refresh: true,
@@ -46,12 +44,12 @@ impl Default for AppSettings {
             data_source_primary: DataSource::Sina,
             ai_configs: vec![],
             active_ai_config_id: None,
-            strategies: vec![default_strategy],
-            active_strategy_id: strategy_id,
             token_usage_today: 0,
             qgqp_b_id: String::new(),
             max_pick_tool_rounds: 10,
             max_pick_token_budget: 100_000,
+            agent_prompts: vec![],
+            active_pick_prompt_id: None,
         }
     }
 }

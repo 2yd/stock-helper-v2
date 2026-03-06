@@ -44,6 +44,21 @@ interface AIPickState {
   closeSimilar: () => void;
 }
 
+/** 格式化股票代码：纯数字自动补前缀，如 600348 → sh600348 */
+function formatStockCode(code: string): string {
+  const c = code.trim().toLowerCase();
+  if (c.startsWith('sh') || c.startsWith('sz') || c.startsWith('bj')) {
+    return c;
+  }
+  const digits = c.replace(/\D/g, '');
+  if (digits.length < 6) return c;
+  const first = digits[0];
+  if (first === '6') return `sh${digits}`;
+  if (first === '0' || first === '3') return `sz${digits}`;
+  if (first === '8' || first === '9') return `bj${digits}`;
+  return `sz${digits}`;
+}
+
 function parseRecommendations(content: string): AIPickRecommendation[] {
   const picksMatch = content.match(/<PICKS>\s*([\s\S]*?)\s*<\/PICKS>/);
   if (!picksMatch) return [];
@@ -54,9 +69,14 @@ function parseRecommendations(content: string): AIPickRecommendation[] {
       logger.warn(`[AI Pick] PICKS 标签内容不是 JSON 数组: ${jsonStr.slice(0, 200)}`);
       return [];
     }
-    const valid = parsed.filter(
-      (item: AIPickRecommendation) => item.code && item.name && item.reason && item.rating,
-    );
+    const valid = parsed
+      .filter(
+        (item: AIPickRecommendation) => item.code && item.name && item.reason && item.rating,
+      )
+      .map((item: AIPickRecommendation) => ({
+        ...item,
+        code: formatStockCode(item.code),
+      }));
     if (valid.length === 0 && parsed.length > 0) {
       logger.warn('[AI Pick] PICKS 数组中无有效推荐项，缺少必要字段(code/name/reason/rating)');
     }

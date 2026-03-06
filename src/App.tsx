@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import AIPick from './pages/AIPick';
 import Settings from './pages/Settings';
-import SmartStock from './pages/SmartStock';
 import Watchlist from './pages/Watchlist';
 import NewsCenter from './pages/NewsCenter';
+import MarketOverviewPage from './pages/MarketOverview';
 import UpdateModal from './components/UpdateModal';
 import type { UpdateInfo } from './components/UpdateModal';
 import { safeInvoke as invoke } from './hooks/useTauri';
 import logger from './utils/logger';
-import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Search, Brain, Eye, Newspaper } from 'lucide-react';
+import { Settings as SettingsIcon, TrendingUp, ChevronLeft, Brain, Eye, Newspaper, BarChart3 } from 'lucide-react';
 
-type Page = 'board' | 'settings' | 'smart' | 'watchlist' | 'news';
+type Page = 'market' | 'board' | 'settings' | 'watchlist' | 'news';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('smart');
+  const [currentPage, setCurrentPage] = useState<Page>('market');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   // 启动时静默检查更新
@@ -44,7 +44,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           {currentPage === 'settings' && (
             <button
-              onClick={() => setCurrentPage('smart')}
+              onClick={() => setCurrentPage('market')}
               className="p-1 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
             >
               <ChevronLeft size={18} className="text-txt-secondary" />
@@ -61,15 +61,15 @@ export default function App() {
         {currentPage !== 'settings' && (
           <div className="flex items-center gap-1 ml-6">
             <button
-              onClick={() => setCurrentPage('smart')}
+              onClick={() => setCurrentPage('market')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
-                currentPage === 'smart'
+                currentPage === 'market'
                   ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
                   : 'text-txt-secondary hover:text-txt-primary hover:bg-bg-elevated'
               }`}
             >
-              <Search size={13} />
-              智能选股
+              <BarChart3 size={13} />
+              大盘
             </button>
             <button
               onClick={() => setCurrentPage('board')}
@@ -120,8 +120,8 @@ export default function App() {
 
       {/* Page Content */}
       <main className="flex-1 min-h-0 overflow-hidden">
-        {currentPage === 'smart' ? (
-          <SmartStock />
+        {currentPage === 'market' ? (
+          <MarketOverviewPage />
         ) : currentPage === 'board' ? (
           <AIPick />
         ) : currentPage === 'watchlist' ? (
